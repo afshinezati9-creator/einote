@@ -17,8 +17,17 @@ interface FinanceTransactionDao {
     @Query("SELECT COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amountToman ELSE 0 END), 0) FROM finance_transactions")
     fun observeExpense(): Flow<Long>
 
+    @Query("SELECT * FROM finance_transactions ORDER BY id ASC")
+    suspend fun getAll(): List<FinanceTransactionEntity>
+
+    @Query("DELETE FROM finance_transactions")
+    suspend fun deleteAll()
+
     @Insert
     suspend fun insert(transaction: FinanceTransactionEntity): Long
+
+    @Insert
+    suspend fun insertAll(transactions: List<FinanceTransactionEntity>)
 
     @Delete
     suspend fun delete(transaction: FinanceTransactionEntity)
