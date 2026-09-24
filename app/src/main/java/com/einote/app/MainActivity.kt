@@ -949,7 +949,7 @@ private fun NoteEditor(
                 Modifier
                     .fillMaxWidth()
                     .padding(horizontal = if (isPhone) 12.dp else if (isTablet) 24.dp else 18.dp, vertical = if (isPhone) 8.dp else 12.dp)
-                    .widthIn(max = if (isPhone) Dp.Infinity else 980.dp),
+                    .then(if (!isPhone) Modifier.widthIn(max = 980.dp) else Modifier),
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 Text(
@@ -1598,15 +1598,3 @@ private fun pickJalaliDateTime(
         setPadding(48, 8, 48, 0)
         fields.forEach { addView(it) }
     }
-    android.app.AlertDialog.Builder(context)
-        .setTitle("تاریخ شمسی")
-        .setView(container)
-        .setNegativeButton("انصراف", null)
-        .setPositiveButton("تأیید") { _, _ ->
-            val y = fields[0].text.toString().toIntOrNull() ?: current.first
-            val m = fields[1].text.toString().toIntOrNull() ?: current.second
-            val d = fields[2].text.toString().toIntOrNull() ?: current.third
-            onSelected(PersianFormat.jalaliToMillis(y, m, d, initial.get(Calendar.HOUR_OF_DAY), initial.get(Calendar.MINUTE)))
-        }
-        .show()
-}
