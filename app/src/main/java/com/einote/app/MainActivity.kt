@@ -2,6 +2,7 @@ package com.einote.app
 
 import android.Manifest
 import android.app.TimePickerDialog
+import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -30,6 +32,8 @@ import com.einote.app.ui.FinanceViewModel
 import com.einote.app.ui.AttachmentViewModel
 import com.einote.app.data.FinanceTransactionEntity
 import com.einote.app.util.PersianFormat
+import coil.compose.AsyncImage
+import java.io.File
 import kotlinx.coroutines.delay
 import java.util.Calendar
 
@@ -260,8 +264,15 @@ private fun NoteEditor(
     val blocks by viewModel.observeBlocks(noteId).collectAsState(initial = emptyList())
     val attachmentViewModel: AttachmentViewModel = viewModel()
     val attachments by attachmentViewModel.observe(noteId).collectAsState(initial = emptyList())
+    val isRecording by attachmentViewModel.isRecording.collectAsState()
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { attachmentViewModel.addFromUri(noteId, it) }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { attachmentViewModel.addFromUri(noteId, it) }
+    }
+    val audioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) attachmentViewModel.startVoiceRecording(noteId)
     }
 
     LaunchedEffect(noteId) {
@@ -342,10 +353,23 @@ private fun NoteEditor(
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(onClick = { viewModel.addTextBlock(noteId) }) { Text("+ متن") }
                     TextButton(onClick = { viewModel.addChecklistBlock(noteId) }) { Text("+ چک‌لیست") }
+                    TextButton(onClick = { photoPicker.launch(ActivityResultContracts.PickVisualMedia.ImageOnly) }) {
+                        Icon(Icons.Default.Photo, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("عکس")
+                    }
                     TextButton(onClick = { attachmentPicker.launch(arrayOf("*/*")) }) {
                         Icon(Icons.Default.AttachFile, null)
                         Spacer(Modifier.width(4.dp))
-                        Text("پیوست")
+                        Text("فایل")
+                    }
+                    TextButton(onClick = {
+                        if (isRecording) attachmentViewModel.stopVoiceRecording()
+                        else audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }) {
+                        Icon(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text(if (isRecording) "توقف ضبط" else "صدا")
                     }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onClose) { Text("بستن") }
@@ -354,9 +378,104 @@ private fun NoteEditor(
                 if (attachments.isNotEmpty()) {
                     Text("پیوست‌ها", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     attachments.forEach { attachment ->
-                        AttachmentCard(attachment.fileName, attachment.sizeBytes) { attachmentViewModel.delete(attachment) }
+                        when {
+                            attachment.mimeType.startsWith("image/") ->
+                                ImageAttachmentCard(attachment.localPath, attachment.fileName, attachment.sizeBytes) {
+                                    attachmentViewModel.delete(attachment)
+                                }
+                            attachment.mimeType.startsWith("audio/") ->
+                                AudioAttachmentCard(attachment.localPath, attachment.fileName, attachment.sizeBytes) {
+                                    attachmentViewModel.delete(attachment)
+                                }
+                            else ->
+                                AttachmentCard(attachment.fileName, attachment.sizeBytes) {
+                                    attachmentViewModel.delete(attachment)
+                                }
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImageAttachmentCard(
+    path: String,
+    fileName: String,
+    sizeBytes: Long,
+    onDelete: () -> Unit
+) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        Column(Modifier.padding(10.dp)) {
+            AsyncImage(
+                model = File(path),
+                contentDescription = fileName,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).clip(RoundedCornerShape(10.dp))
+            )
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text(fileName, maxLines = 2)
+                    Text(formatFileSize(sizeBytes), style = MaterialTheme.typography.labelSmall)
+                }
+                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف عکس") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudioAttachmentCard(
+    path: String,
+    fileName: String,
+    sizeBytes: Long,
+    onDelete: () -> Unit
+) {
+    var playing by remember(path) { mutableStateOf(false) }
+    var player by remember(path) { mutableStateOf<MediaPlayer?>(null) }
+
+    DisposableEffect(path) {
+        onDispose {
+            player?.release()
+            player = null
+        }
+    }
+
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp)) {
+            Icon(if (playing) Icons.Default.VolumeUp else Icons.Default.Mic, contentDescription = null)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(fileName, maxLines = 2)
+                Text(formatFileSize(sizeBytes), style = MaterialTheme.typography.labelSmall)
+            }
+            IconButton(onClick = {
+                if (playing) {
+                    player?.stop()
+                    player?.release()
+                    player = null
+                    playing = false
+                } else {
+                    runCatching {
+                        MediaPlayer().apply {
+                            setDataSource(path)
+                            prepare()
+                            setOnCompletionListener {
+                                playing = false
+                                release()
+                                player = null
+                            }
+                            start()
+                            player = this
+                            playing = true
+                        }
+                    }
+                }
+            }) {
+                Icon(if (playing) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = "پخش/توقف")
+            }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = "حذف صدا")
             }
         }
     }
