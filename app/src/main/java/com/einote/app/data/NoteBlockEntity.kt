@@ -18,6 +18,8 @@ data class NoteBlockEntity(
     val dueAt: Long? = null,
     val reminderAt: Long? = null,
     val completedAt: Long? = null,
+    val textColor: Long = 0L,
+    val textSizeSp: Float = 17f,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
