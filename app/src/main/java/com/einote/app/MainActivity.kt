@@ -1,32 +1,4 @@
 package com.einote.app
-            if (tab == 0) {
-                item {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AssistChip(
-                            onClick = { filtersOpen = true },
-                            label = { Text(if (activeFilterCount == 0) "فیلترها" else "فیلترها · $activeFilterCount") },
-                            leadingIcon = { Icon(Icons.Default.Tune, null) }
-                        )
-                        if (selectedTag != null) {
-                            InputChip(
-                                selected = true,
-                                onClick = { viewModel.setSelectedTag(null) },
-                                label = { Text("#$selectedTag") },
-                                trailingIcon = { Icon(Icons.Default.Close, null) }
-                            )
-                        }
-                        if (pinnedOnly) {
-                            InputChip(selected = true, onClick = { viewModel.setPinnedOnly(false) }, label = { Text("سنجاق‌شده") }, trailingIcon = { Icon(Icons.Default.Close, null) })
-                        }
-                        if (archivedOnly) {
-                            InputChip(selected = true, onClick = { viewModel.setArchivedOnly(false) }, label = { Text("بایگانی") }, trailingIcon = { Icon(Icons.Default.Close, null) })
-                        }
-                    }
-                }
-            }
 
 import android.Manifest
 import android.media.MediaPlayer
@@ -2307,8 +2279,7 @@ private fun fieldValueToHtml(value: TextFieldValue): String {
             if (next != styles) break
             end++
         }
-        var text = android.text.TextUtils.htmlEncode(annotated.text.substring(i, end)).replace("
-", "<br>")
+        var text = android.text.TextUtils.htmlEncode(annotated.text.substring(i, end)).replace("\n", "<br>")
         val style = mergeSpanStyles(styles)
         if (style.fontWeight == FontWeight.Bold) text = "<b>$text</b>"
         if (style.fontStyle == FontStyle.Italic) text = "<i>$text</i>"
