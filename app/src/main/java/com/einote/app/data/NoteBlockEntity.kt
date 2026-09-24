@@ -20,6 +20,7 @@ data class NoteBlockEntity(
     val completedAt: Long? = null,
     val textColor: Long = 0L,
     val textSizeSp: Float = 17f,
+    val alignment: String = "auto",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )
