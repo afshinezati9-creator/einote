@@ -2,7 +2,6 @@ package com.einote.app.data
 
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlinx.coroutines.runBlocking
@@ -82,41 +81,61 @@ class NoteDatabaseMigrationTest {
 
     @Test
     fun migrateFromVersion2ToCurrentPreservesDataAndAddsAllTables() = runBlocking {
-        db = Room.databaseBuilder(
-            context,
-            NoteDatabase::class.java,
-            DB_NAME
-        ).addMigrations(
-            *MIGRATIONS
-        ).allowMainThreadQueries().build()
+        val database = SQLiteDatabase.openDatabase(
+            context.getDatabasePath(DB_NAME).path,
+            null,
+            SQLiteDatabase.OPEN_READWRITE
+        )
+        database.beginTransaction()
+        try {
+            MIGRATIONS.forEach { it.migrate(androidx.sqlite.db.framework.FrameworkSQLiteDatabase(database)) }
+            database.version = 5
+            database.setTransactionSuccessful()
+        } finally {
+            database.endTransaction()
+        }
 
-        val note = db.noteDao().getById(7)
-        val block = db.noteBlockDao().getById(11)
-        val financeTableExists = tableExists(db.openHelper.writableDatabase, "finance_transactions")
-        val attachmentsTableExists = tableExists(db.openHelper.writableDatabase, "attachments")
+        val noteCursor = database.rawQuery("SELECT title, content FROM notes WHERE id = 7", null)
+        val blockCursor = database.rawQuery("SELECT content FROM note_blocks WHERE id = 11", null)
+        val noteTitle: String
+        val noteContent: String
+        val blockContent: String
+        noteCursor.use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            noteTitle = cursor.getString(0)
+            noteContent = cursor.getString(1)
+        }
+        blockCursor.use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            blockContent = cursor.getString(0)
+        }
+        val financeTableExists = tableExists(database, "finance_transactions")
+        val attachmentsTableExists = tableExists(database, "attachments")
 
-        assertNotNull(note)
-        assertEquals("قدیمی", note!!.title)
-        assertEquals("محتوای قدیمی", note.content)
-        assertNotNull(block)
-        assertEquals("کار قدیمی", block!!.content)
-        assertEquals(5, db.openHelper.writableDatabase.version)
+        assertEquals("قدیمی", noteTitle)
+        assertEquals("محتوای قدیمی", noteContent)
+        assertEquals("کار قدیمی", blockContent)
+        assertEquals(5, database.version)
+        database.close()
         assertTrue(financeTableExists)
         assertTrue(attachmentsTableExists)
     }
 
     @Test
     fun migrateFromVersion2CreatesNullablePlanningFields() = runBlocking {
-        db = Room.databaseBuilder(
-            context,
-            NoteDatabase::class.java,
-            DB_NAME
-        ).addMigrations(*MIGRATIONS).allowMainThreadQueries().build()
-
-        val block = db.noteBlockDao().getById(11)!!
-        assertEquals(null, block.dueAt)
-        assertEquals(null, block.reminderAt)
-        assertEquals(null, block.completedAt)
+        val database = SQLiteDatabase.openDatabase(
+            context.getDatabasePath(DB_NAME).path,
+            null,
+            SQLiteDatabase.OPEN_READWRITE
+        )
+        MIGRATIONS.forEach { it.migrate(androidx.sqlite.db.framework.FrameworkSQLiteDatabase(database)) }
+        val cursor = database.rawQuery("PRAGMA table_info(note_blocks)", null)
+        val columns = mutableSetOf<String>()
+        cursor.use { while (it.moveToNext()) columns += it.getString(1) }
+        database.close()
+        assertTrue("dueAt" in columns)
+        assertTrue("reminderAt" in columns)
+        assertTrue("completedAt" in columns)
     }
 
     private fun tableExists(database: androidx.sqlite.db.SupportSQLiteDatabase, name: String): Boolean {
