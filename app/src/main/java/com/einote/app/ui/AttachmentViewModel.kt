@@ -42,10 +42,14 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         val resolver = app.contentResolver
         val mime = resolver.getType(uri) ?: "application/octet-stream"
         val name = queryDisplayName(uri) ?: "پیوست-${System.currentTimeMillis()}"
-        copyIntoAppStorage(noteId, name, mime) {
-            resolver.openInputStream(uri)?.use { input -> input.copyTo(this) }
-                ?: throw IllegalStateException("فایل قابل خواندن نیست")
-        }
+        copyIntoAppStorage(noteId, name, mime, uri, null)
+    }
+
+    fun addImageFromUri(noteId: Long, uri: Uri) = viewModelScope.launch {
+        val resolver = app.contentResolver
+        val mime = resolver.getType(uri) ?: "image/*"
+        val name = queryDisplayName(uri) ?: "عکس-${System.currentTimeMillis()}.jpg"
+        copyIntoAppStorage(noteId, name, mime, uri, BlockType.IMAGE)
     }
 
     fun startVoiceRecording(noteId: Long): Boolean {
@@ -157,14 +161,18 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         noteId: Long,
         name: String,
         mime: String,
-        writer: java.io.OutputStream.() -> Unit
+        uri: Uri,
+        createBlock: BlockType?
     ) {
         val safeName = name.replace(Regex("""[\/:*?"<>|]"""), "_")
         val dir = File(app.filesDir, "attachments").apply { mkdirs() }
         val file = File(dir, "${System.currentTimeMillis()}_$safeName")
         runCatching {
-            file.outputStream().use(writer)
-            dao.insert(
+            app.contentResolver.openInputStream(uri)?.use { input ->
+                file.outputStream().use { output -> input.copyTo(output) }
+            } ?: throw IllegalStateException("فایل قابل خواندن نیست")
+
+            val attachmentId = dao.insert(
                 AttachmentEntity(
                     noteId = noteId,
                     fileName = name,
@@ -173,6 +181,16 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                     localPath = file.absolutePath
                 )
             )
+            if (createBlock != null) {
+                blockDao.insert(
+                    NoteBlockEntity(
+                        noteId = noteId,
+                        type = createBlock.name,
+                        content = attachmentId.toString(),
+                        position = blockDao.nextPosition(noteId)
+                    )
+                )
+            }
         }.onFailure { runCatching { file.delete() } }
     }
 
