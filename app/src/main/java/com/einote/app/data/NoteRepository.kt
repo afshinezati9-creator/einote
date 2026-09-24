@@ -9,6 +9,7 @@ class NoteRepository(
     fun observeNotes(query: String): Flow<List<NoteEntity>> = dao.observeNotes(query)
     suspend fun getById(id: Long): NoteEntity? = dao.getById(id)
     fun observeBlocks(noteId: Long): Flow<List<NoteBlockEntity>> = blockDao.observeForNote(noteId)
+    fun observePlannedBlocks(): Flow<List<NoteBlockEntity>> = blockDao.observePlanned()
     suspend fun insert(note: NoteEntity): Long = dao.insert(note)
     suspend fun update(note: NoteEntity) = dao.update(note)
 
