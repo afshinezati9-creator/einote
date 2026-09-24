@@ -1,6 +1,7 @@
 package com.einote.app.ui
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.Data
@@ -23,7 +24,7 @@ import java.util.concurrent.TimeUnit
 
 class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val database = NoteDatabase.get(application)
-    private val repository = NoteRepository(database.noteDao(), database.noteBlockDao())
+    private val repository = NoteRepository(database.noteDao(), database.noteBlockDao(), database.attachmentDao())
     private val workManager = WorkManager.getInstance(application)
 
     private val query = MutableStateFlow("")
@@ -48,46 +49,32 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun observeBlocks(noteId: Long) = repository.observeBlocks(noteId)
     fun observePlannedBlocks() = repository.observePlannedBlocks()
+    fun observeAttachments(noteId: Long) = repository.observeAttachments(noteId)
 
     fun saveNote(note: NoteEntity) = viewModelScope.launch {
         repository.update(note.copy(updatedAt = System.currentTimeMillis()))
     }
 
-    fun addTextBlock(noteId: Long) = viewModelScope.launch {
-        repository.addBlock(noteId, BlockType.TEXT)
-    }
-
-    fun addChecklistBlock(noteId: Long) = viewModelScope.launch {
-        repository.addBlock(noteId, BlockType.CHECKLIST)
-    }
-
+    fun addTextBlock(noteId: Long) = viewModelScope.launch { repository.addBlock(noteId, BlockType.TEXT) }
+    fun addChecklistBlock(noteId: Long) = viewModelScope.launch { repository.addBlock(noteId, BlockType.CHECKLIST) }
     fun updateBlock(block: NoteBlockEntity) = viewModelScope.launch {
         repository.updateBlock(block)
         scheduleReminder(block)
     }
-
     fun deleteBlock(block: NoteBlockEntity) = viewModelScope.launch {
         repository.deleteBlock(block)
         cancelReminder(block.id)
     }
 
     fun scheduleReminder(block: NoteBlockEntity) {
-        val reminderAt = block.reminderAt ?: run {
-            cancelReminder(block.id)
-            return
-        }
+        val reminderAt = block.reminderAt ?: run { cancelReminder(block.id); return }
         if (block.checked || reminderAt <= System.currentTimeMillis()) return
-
         val delay = reminderAt - System.currentTimeMillis()
-        val data = Data.Builder()
-            .putLong(ReminderWorker.KEY_BLOCK_ID, block.id)
-            .build()
-
+        val data = Data.Builder().putLong(ReminderWorker.KEY_BLOCK_ID, block.id).build()
         val request = OneTimeWorkRequestBuilder<ReminderWorker>()
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
             .setInputData(data)
             .build()
-
         workManager.enqueueUniqueWork(
             ReminderWorker.WORK_PREFIX + block.id,
             ExistingWorkPolicy.REPLACE,
