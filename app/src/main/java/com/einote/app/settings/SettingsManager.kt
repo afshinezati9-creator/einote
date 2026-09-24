@@ -5,8 +5,22 @@ import android.content.Context
 class SettingsManager(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("einote_settings", Context.MODE_PRIVATE)
 
-    fun isDarkMode(): Boolean = prefs.getBoolean(KEY_DARK_MODE, false)
-    fun setDarkMode(value: Boolean) = prefs.edit().putBoolean(KEY_DARK_MODE, value).apply()
+    fun themeMode(): String {
+        val stored = prefs.getString(KEY_THEME_MODE, null)
+        if (stored != null) return stored
+        return if (prefs.getBoolean(KEY_DARK_MODE, false)) THEME_DARK else THEME_LIGHT
+    }
+
+    fun setThemeMode(value: String) {
+        val safe = value.takeIf { it in THEME_MODES } ?: THEME_SYSTEM
+        prefs.edit()
+            .putString(KEY_THEME_MODE, safe)
+            .putBoolean(KEY_DARK_MODE, safe == THEME_DARK)
+            .apply()
+    }
+
+    fun isDarkMode(): Boolean = themeMode() == THEME_DARK
+    fun setDarkMode(value: Boolean) = setThemeMode(if (value) THEME_DARK else THEME_LIGHT)
 
     fun accent(): String = prefs.getString(KEY_ACCENT, ACCENT_BLUE) ?: ACCENT_BLUE
     fun setAccent(value: String) = prefs.edit().putString(KEY_ACCENT, value).apply()
@@ -27,10 +41,17 @@ class SettingsManager(context: Context) {
     fun setCompactBlocks(value: Boolean) = prefs.edit().putBoolean(KEY_COMPACT_BLOCKS, value).apply()
 
     companion object {
+        const val THEME_LIGHT = "light"
+        const val THEME_DARK = "dark"
+        const val THEME_SYSTEM = "system"
+        val THEME_MODES = setOf(THEME_LIGHT, THEME_DARK, THEME_SYSTEM)
+
         const val ACCENT_BLUE = "blue"
         const val ACCENT_PURPLE = "purple"
         const val ACCENT_GREEN = "green"
         const val ACCENT_ORANGE = "orange"
+        const val ACCENT_PINK = "pink"
+        private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_DARK_MODE = "dark_mode"
         private const val KEY_ACCENT = "accent"
         private const val KEY_TEXT_SCALE = "text_scale"
