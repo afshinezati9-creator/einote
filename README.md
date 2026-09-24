@@ -22,3 +22,4 @@ Native Android, offline-first architecture, automated APK builds through GitHub 
 See `docs/PRODUCT.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md` and `SECURITY.md`.
 
 Repository: https://github.com/afshinezati9-creator/einote
+
