@@ -25,8 +25,17 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): NoteEntity?
 
+    @Query("SELECT * FROM notes ORDER BY id ASC")
+    suspend fun getAll(): List<NoteEntity>
+
+    @Query("DELETE FROM notes")
+    suspend fun deleteAll()
+
     @Insert
     suspend fun insert(note: NoteEntity): Long
+
+    @Insert
+    suspend fun insertAll(notes: List<NoteEntity>)
 
     @Update
     suspend fun update(note: NoteEntity)
