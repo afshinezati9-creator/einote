@@ -24,7 +24,7 @@ class NoteRepository(
     suspend fun setPinned(id: Long, pinned: Boolean) =
         dao.setPinned(id, pinned, System.currentTimeMillis())
 
-    suspend fun archive(id: Long) = dao.archive(id, System.currentTimeMillis())
+    suspend fun setArchived(id: Long, archived: Boolean) = dao.setArchived(id, archived, System.currentTimeMillis())
 
     suspend fun addBlock(noteId: Long, type: BlockType, content: String = ""): Long =
         blockDao.insert(
