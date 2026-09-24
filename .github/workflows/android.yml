@@ -9,7 +9,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
 
@@ -71,7 +72,7 @@ jobs:
           cores: 4
           ram-size: 4096M
           disk-size: 4096M
-          emulator-boot-timeout: 900
+          emulator-boot-timeout: 600
           script: gradle connectedDebugAndroidTest --stacktrace
 
       - name: Upload APK
