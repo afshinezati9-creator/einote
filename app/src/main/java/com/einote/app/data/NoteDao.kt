@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 interface NoteDao {
     @Query("""
         SELECT * FROM notes
-        WHERE (
+        WHERE space = :space AND (
             :query = '' OR
             title LIKE '%' || :query || '%' OR
             content LIKE '%' || :query || '%' OR
@@ -21,7 +21,7 @@ interface NoteDao {
         )
         ORDER BY isPinned DESC, updatedAt DESC
     """)
-    fun observeNotes(query: String): Flow<List<NoteEntity>>
+    fun observeNotes(query: String, space: String): Flow<List<NoteEntity>>
 
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): NoteEntity?
