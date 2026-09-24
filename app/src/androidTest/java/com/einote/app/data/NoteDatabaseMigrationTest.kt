@@ -100,7 +100,7 @@ class NoteDatabaseMigrationTest {
         assertEquals("محتوای قدیمی", note.content)
         assertNotNull(block)
         assertEquals("کار قدیمی", block!!.content)
-        assertEquals(3, db.openHelper.writableDatabase.version)
+        assertEquals(5, db.openHelper.writableDatabase.version)
         assertTrue(financeTableExists)
         assertTrue(attachmentsTableExists)
     }
@@ -128,58 +128,6 @@ class NoteDatabaseMigrationTest {
 
     companion object {
         private const val DB_NAME = "einote_migration_test.db"
-        private val MIGRATIONS = arrayOf(
-            migrationFor(2, 3),
-            migrationFor(3, 4),
-            migrationFor(4, 5)
-        )
-
-        private fun migrationFor(from: Int, to: Int): androidx.room.migration.Migration =
-            when (from to to) {
-                2 to 3 -> object : androidx.room.migration.Migration(2, 3) {
-                    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                        db.execSQL("ALTER TABLE note_blocks ADD COLUMN dueAt INTEGER")
-                        db.execSQL("ALTER TABLE note_blocks ADD COLUMN reminderAt INTEGER")
-                        db.execSQL("ALTER TABLE note_blocks ADD COLUMN completedAt INTEGER")
-                        db.execSQL("CREATE INDEX IF NOT EXISTS index_note_blocks_type_dueAt ON note_blocks(type, dueAt)")
-                    }
-                }
-                3 to 4 -> object : androidx.room.migration.Migration(3, 4) {
-                    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                        db.execSQL(
-                            """
-                            CREATE TABLE IF NOT EXISTS finance_transactions (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                                title TEXT NOT NULL,
-                                amountToman INTEGER NOT NULL,
-                                type TEXT NOT NULL,
-                                category TEXT NOT NULL,
-                                transactionAt INTEGER NOT NULL,
-                                note TEXT NOT NULL,
-                                createdAt INTEGER NOT NULL
-                            )
-                            """.trimIndent()
-                        )
-                    }
-                }
-                else -> object : androidx.room.migration.Migration(4, 5) {
-                    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                        db.execSQL(
-                            """
-                            CREATE TABLE IF NOT EXISTS attachments (
-                                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                                noteId INTEGER NOT NULL,
-                                fileName TEXT NOT NULL,
-                                mimeType TEXT NOT NULL,
-                                sizeBytes INTEGER NOT NULL,
-                                localPath TEXT NOT NULL,
-                                createdAt INTEGER NOT NULL
-                            )
-                            """.trimIndent()
-                        )
-                        db.execSQL("CREATE INDEX IF NOT EXISTS index_attachments_noteId ON attachments(noteId)")
-                    }
-                }
-            }
+        private val MIGRATIONS = NoteDatabase.ALL_MIGRATIONS
     }
 }

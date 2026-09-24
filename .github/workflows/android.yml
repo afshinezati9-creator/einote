@@ -27,8 +27,19 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      - name: Run unit tests
+        run: gradle testDebugUnitTest --stacktrace
+
       - name: Build debug APK
         run: gradle assembleDebug --stacktrace
+
+      - name: Set up emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          script: gradle connectedDebugAndroidTest --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4

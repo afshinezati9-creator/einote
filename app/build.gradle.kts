@@ -11,6 +11,7 @@ android {
         applicationId="com.einote.app"
         minSdk=26
         targetSdk=35
+        testInstrumentationRunner="androidx.test.runner.AndroidJUnitRunner"
         versionCode=7
         versionName="0.7.0"
     }
