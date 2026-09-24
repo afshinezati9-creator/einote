@@ -13,6 +13,7 @@ import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 import android.util.Base64
+import java.security.MessageDigest
 
 class SecurityManager(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("einote_security", Context.MODE_PRIVATE)
@@ -35,14 +36,14 @@ class SecurityManager(context: Context) {
         prefs.edit().putString(KEY_VERIFIER, encrypt(payload)).apply()
     }
 
-    fun verifyPin(pin: String): Boolean {
+    fun verifyPin(pin: String): Boolean {\n        val now = System.currentTimeMillis()\n        val lockoutUntil = prefs.getLong(KEY_LOCKOUT_UNTIL, 0L)\n        if (lockoutUntil > now) return false
         val stored = prefs.getString(KEY_VERIFIER, null) ?: return false
         return runCatching {
             val decoded = Base64.decode(decrypt(stored), Base64.NO_WRAP)
             if (decoded.size != 48) return false
             val salt = decoded.copyOfRange(0, 16)
             val expected = decoded.copyOfRange(16, 48)
-            expected.contentEquals(derive(pin, salt))
+            MessageDigest.isEqual(expected, derive(pin, salt))
         }.getOrDefault(false)
     }
 
@@ -91,6 +92,6 @@ class SecurityManager(context: Context) {
     companion object {
         private const val KEY_ENABLED = "lock_enabled"
         private const val KEY_VERIFIER = "pin_verifier"
-        private const val KEY_AUTO_LOCK_MINUTES = "auto_lock_minutes"
+        private const val KEY_AUTO_LOCK_MINUTES = "auto_lock_minutes"\n        private const val KEY_FAILED_ATTEMPTS = "failed_attempts"\n        private const val KEY_LOCKOUT_UNTIL = "lockout_until"
     }
 }
