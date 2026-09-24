@@ -40,7 +40,18 @@ class SettingsManager(context: Context) {
     fun compactBlocks(): Boolean = prefs.getBoolean(KEY_COMPACT_BLOCKS, false)
     fun setCompactBlocks(value: Boolean) = prefs.edit().putBoolean(KEY_COMPACT_BLOCKS, value).apply()
 
-    fun dashboardDensity(): String = prefs.getString(KEY_DASHBOARD_DENSITY, DASHBOARD_BALANCED)\n        ?.takeIf { it in DASHBOARD_DENSITIES } ?: DASHBOARD_BALANCED\n\n    fun setDashboardDensity(value: String) {\n        val safe = value.takeIf { it in DASHBOARD_DENSITIES } ?: DASHBOARD_BALANCED\n        prefs.edit().putString(KEY_DASHBOARD_DENSITY, safe).apply()\n    }\n\n    fun animationsEnabled(): Boolean = prefs.getBoolean(KEY_ANIMATIONS, true)\n    fun setAnimationsEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_ANIMATIONS, value).apply()\n\n    fun editorMode(): String {
+    fun dashboardDensity(): String = prefs.getString(KEY_DASHBOARD_DENSITY, DASHBOARD_BALANCED)
+        ?.takeIf { it in DASHBOARD_DENSITIES } ?: DASHBOARD_BALANCED
+
+    fun setDashboardDensity(value: String) {
+        val safe = value.takeIf { it in DASHBOARD_DENSITIES } ?: DASHBOARD_BALANCED
+        prefs.edit().putString(KEY_DASHBOARD_DENSITY, safe).apply()
+    }
+
+    fun animationsEnabled(): Boolean = prefs.getBoolean(KEY_ANIMATIONS, true)
+    fun setAnimationsEnabled(value: Boolean) = prefs.edit().putBoolean(KEY_ANIMATIONS, value).apply()
+
+    fun editorMode(): String {
         val value = prefs.getString(KEY_EDITOR_MODE, EDITOR_STANDARD) ?: EDITOR_STANDARD
         return value.takeIf { it in EDITOR_MODES } ?: EDITOR_STANDARD
     }
@@ -65,7 +76,12 @@ class SettingsManager(context: Context) {
         const val EDITOR_STANDARD = "standard"
         const val EDITOR_COMPACT = "compact"
         const val EDITOR_FOCUS = "focus"
-        val EDITOR_MODES = setOf(EDITOR_STANDARD, EDITOR_COMPACT, EDITOR_FOCUS)\n\n        const val DASHBOARD_AIRY = "airy"\n        const val DASHBOARD_BALANCED = "balanced"\n        const val DASHBOARD_COMPACT = "compact"\n        val DASHBOARD_DENSITIES = setOf(DASHBOARD_AIRY, DASHBOARD_BALANCED, DASHBOARD_COMPACT)
+        val EDITOR_MODES = setOf(EDITOR_STANDARD, EDITOR_COMPACT, EDITOR_FOCUS)
+
+        const val DASHBOARD_AIRY = "airy"
+        const val DASHBOARD_BALANCED = "balanced"
+        const val DASHBOARD_COMPACT = "compact"
+        val DASHBOARD_DENSITIES = setOf(DASHBOARD_AIRY, DASHBOARD_BALANCED, DASHBOARD_COMPACT)
 
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_DARK_MODE = "dark_mode"
@@ -75,6 +91,8 @@ class SettingsManager(context: Context) {
         private const val KEY_SHOW_ARCHIVED = "show_archived"
         private const val KEY_NOTIFICATIONS = "notifications"
         private const val KEY_COMPACT_BLOCKS = "compact_blocks"
-        private const val KEY_EDITOR_MODE = "editor_mode"\n        private const val KEY_DASHBOARD_DENSITY = "dashboard_density"\n        private const val KEY_ANIMATIONS = "animations"
+        private const val KEY_EDITOR_MODE = "editor_mode"
+        private const val KEY_DASHBOARD_DENSITY = "dashboard_density"
+        private const val KEY_ANIMATIONS = "animations"
     }
 }
