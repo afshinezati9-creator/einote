@@ -826,6 +826,8 @@ private fun NoteEditor(
     val attachmentViewModel: AttachmentViewModel = viewModel()
     val attachments by attachmentViewModel.observe(noteId).collectAsState(initial = emptyList())
     val isRecording by attachmentViewModel.isRecording.collectAsState()
+    val recordingElapsedMs by attachmentViewModel.recordingElapsedMs.collectAsState()
+    var showRecordingPanel by remember { mutableStateOf(false) }
 
     val screenWidth = LocalConfiguration.current.screenWidthDp
     val isPhone = screenWidth < 600
@@ -922,6 +924,23 @@ private fun NoteEditor(
             )
         },
         bottomBar = {
+            if (showRecordingPanel || isRecording) {
+                InlineRecordingPanel(
+                    isRecording = isRecording,
+                    elapsedMs = recordingElapsedMs,
+                    onStart = {
+                        if (!isRecording) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    onPause = { /* MediaRecorder pause/resume is added in the next recording refinement. */ },
+                    onStop = {
+                        attachmentViewModel.stopVoiceRecording()
+                        showRecordingPanel = false
+                    },
+                    onDismiss = {
+                        if (!isRecording) showRecordingPanel = false
+                    }
+                )
+            }
             NoteComposerToolbar(
                 compact = isPhone,
                 isRecording = isRecording,
@@ -935,8 +954,12 @@ private fun NoteEditor(
                 },
                 onFile = { attachmentPicker.launch(arrayOf("*/*")) },
                 onAudio = {
-                    if (isRecording) attachmentViewModel.stopVoiceRecording()
-                    else audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    if (isRecording) {
+                        attachmentViewModel.stopVoiceRecording()
+                    } else {
+                        showRecordingPanel = true
+                        audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                    }
                 },
                 onClose = onClose
             )
@@ -1037,6 +1060,72 @@ private fun NoteEditor(
                             Spacer(Modifier.height(12.dp))
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InlineRecordingPanel(
+    isRecording: Boolean,
+    elapsedMs: Long,
+    onStart: () -> Unit,
+    onPause: () -> Unit,
+    onStop: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val totalSeconds = (elapsedMs / 1000L).coerceAtLeast(0L)
+    val minutes = totalSeconds / 60L
+    val seconds = totalSeconds % 60L
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        tonalElevation = 10.dp,
+        shadowElevation = 10.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(12.dp)
+                    .clip(androidx.compose.foundation.shape.CircleShape)
+                    .background(
+                        if (isRecording) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.outline
+                    )
+            )
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (isRecording) "در حال ضبط صدا" else "آماده ضبط صدا",
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (!isRecording) {
+                IconButton(onClick = onStart) {
+                    Icon(Icons.Default.Mic, "شروع ضبط")
+                }
+            } else {
+                IconButton(onClick = onPause) {
+                    Icon(Icons.Default.Pause, "مکث")
+                }
+                IconButton(onClick = onStop) {
+                    Icon(Icons.Default.StopCircle, "توقف و ذخیره")
+                }
+            }
+            if (!isRecording) {
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, "بستن")
                 }
             }
         }
