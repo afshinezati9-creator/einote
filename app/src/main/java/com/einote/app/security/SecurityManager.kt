@@ -41,13 +41,30 @@ class SecurityManager(context: Context) {
         val lockoutUntil = prefs.getLong(KEY_LOCKOUT_UNTIL, 0L)
         if (lockoutUntil > now) return false
         val stored = prefs.getString(KEY_VERIFIER, null) ?: return false
-        return runCatching {
+
+        val ok = runCatching {
             val decoded = Base64.decode(decrypt(stored), Base64.NO_WRAP)
             if (decoded.size != 48) return false
             val salt = decoded.copyOfRange(0, 16)
             val expected = decoded.copyOfRange(16, 48)
             MessageDigest.isEqual(expected, derive(pin, salt))
         }.getOrDefault(false)
+
+        if (ok) {
+            prefs.edit()
+                .remove(KEY_FAILED_ATTEMPTS)
+                .remove(KEY_LOCKOUT_UNTIL)
+                .apply()
+        } else {
+            val attempts = prefs.getInt(KEY_FAILED_ATTEMPTS, 0) + 1
+            val editor = prefs.edit().putInt(KEY_FAILED_ATTEMPTS, attempts)
+            if (attempts >= 5) {
+                editor.putLong(KEY_LOCKOUT_UNTIL, now + 30_000L)
+                    .putInt(KEY_FAILED_ATTEMPTS, 0)
+            }
+            editor.apply()
+        }
+        return ok
     }
 
     fun removePin() {
