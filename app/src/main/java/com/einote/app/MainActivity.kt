@@ -2081,3 +2081,29 @@ private fun pickJalaliDateTime(
         setPadding(48, 8, 48, 0)
         fields.forEach { addView(it) }
     }
+    android.app.AlertDialog.Builder(context)
+        .setTitle("انتخاب تاریخ")
+        .setView(container)
+        .setPositiveButton("تأیید") { _, _ ->
+            val year = PersianFormat.latinDigits(fields[0].text.toString()).toIntOrNull()
+            val month = PersianFormat.latinDigits(fields[1].text.toString()).toIntOrNull()
+            val day = PersianFormat.latinDigits(fields[2].text.toString()).toIntOrNull()
+            if (year != null && month != null && day != null &&
+                year in 1300..1600 && month in 1..12 && day in 1..31
+            ) {
+                runCatching {
+                    onSelected(
+                        PersianFormat.jalaliToMillis(
+                            year,
+                            month,
+                            day,
+                            initial.get(Calendar.HOUR_OF_DAY),
+                            initial.get(Calendar.MINUTE)
+                        )
+                    )
+                }
+            }
+        }
+        .setNegativeButton("انصراف", null)
+        .show()
+}
