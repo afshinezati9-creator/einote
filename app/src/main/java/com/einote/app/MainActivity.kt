@@ -570,10 +570,7 @@ private fun HomeScreen(
 
     LaunchedEffect(Unit) { viewModel.setSpace("WRITING") }
 
-    val allTags = remember(notes) {
-        notes.flatMap { it.tags.split(',', '،').map { tag -> tag.trim() }.filter { it.isNotBlank() } }
-            .distinctBy { it.replace('ي','ی').replace('ك','ک') }.sorted()
-    }
+    val allTags by viewModel.allTags.collectAsState()
     val activeFilterCount = listOf(pinnedOnly, archivedOnly, selectedTag != null, sort != NoteViewModel.SORT_UPDATED).count { it }
     val visibleNotes = remember(notes, pinnedFirst, showArchived, pinnedOnly, archivedOnly, selectedTag, sort) {
         notes.filter { showArchived || !it.isArchived }
