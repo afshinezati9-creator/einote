@@ -1,7 +1,6 @@
 package com.einote.app
 
 import android.Manifest
-import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.os.Build
 import android.os.Bundle
@@ -27,10 +26,11 @@ import com.einote.app.data.BlockType
 import com.einote.app.data.NoteBlockEntity
 import com.einote.app.data.NoteEntity
 import com.einote.app.ui.NoteViewModel
+import com.einote.app.ui.FinanceViewModel
+import com.einote.app.data.FinanceTransactionEntity
+import com.einote.app.util.PersianFormat
 import kotlinx.coroutines.delay
-import java.text.DateFormat
 import java.util.Calendar
-import java.util.Date
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,6 +43,8 @@ class MainActivity : ComponentActivity() {
 fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     var editingId by remember { mutableStateOf<Long?>(null) }
     var plannerOpen by remember { mutableStateOf(false) }
+    var financeOpen by remember { mutableStateOf(false) }
+    val financeViewModel: FinanceViewModel = viewModel()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     fun askNotificationPermission() {
@@ -58,11 +60,13 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
                 onReminderScheduled = ::askNotificationPermission
             )
             plannerOpen -> PlannerScreen(viewModel, onBack = { plannerOpen = false })
+            financeOpen -> FinanceScreen(financeViewModel, onBack = { financeOpen = false })
             else -> HomeScreen(
                 viewModel = viewModel,
                 onCreate = { viewModel.createNote { editingId = it } },
                 onOpen = { editingId = it },
-                onPlanner = { plannerOpen = true }
+                onPlanner = { plannerOpen = true },
+                onFinance = { financeOpen = true }
             )
         }
     }
@@ -104,6 +108,7 @@ private fun HomeScreen(
                     title = { Text("eiNote", fontWeight = FontWeight.SemiBold) },
                     actions = {
                         IconButton(onClick = onPlanner) { Icon(Icons.Default.CalendarMonth, "برنامه") }
+                        IconButton(onClick = onFinance) { Icon(Icons.Default.AccountBalanceWallet, "مالی") }
                         IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
                     }
                 )
@@ -229,10 +234,10 @@ private fun PlannedBlockCard(block: NoteBlockEntity, viewModel: NoteViewModel) {
             Column(Modifier.weight(1f).padding(top = 4.dp)) {
                 Text(block.content.ifBlank { "کار بدون عنوان" }, style = MaterialTheme.typography.titleMedium)
                 block.dueAt?.let {
-                    Text("انجام: " + formatDateTime(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Text("انجام: " + PersianFormat.jalaliDateTime(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
                 block.reminderAt?.let {
-                    Text("یادآوری: " + formatDateTime(it), style = MaterialTheme.typography.bodySmall)
+                    Text("یادآوری: " + PersianFormat.jalaliDateTime(it), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -385,7 +390,7 @@ private fun BlockEditor(
 
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(onClick = {
-                            pickDateTime(context, block.dueAt ?: System.currentTimeMillis()) {
+                            pickJalaliDateTime(context, block.dueAt ?: System.currentTimeMillis()) {
                                 if (it > System.currentTimeMillis()) {
                                     viewModel.updateBlock(block.copy(dueAt = it, reminderAt = it))
                                     onReminderScheduled()
@@ -394,7 +399,7 @@ private fun BlockEditor(
                         }) {
                             Icon(Icons.Default.CalendarMonth, null)
                             Spacer(Modifier.width(4.dp))
-                            Text(if (block.dueAt == null) "برنامه‌ریزی" else formatDateTime(block.dueAt))
+                            Text(if (block.dueAt == null) "برنامه‌ریزی" else PersianFormat.jalaliDateTime(block.dueAt))
                         }
                         if (block.dueAt != null) {
                             TextButton(onClick = {
@@ -420,34 +425,153 @@ private fun BlockEditor(
     }
 }
 
-private fun pickDateTime(
+@Composable
+private fun FinanceScreen(viewModel: FinanceViewModel, onBack: () -> Unit) {
+    val transactions by viewModel.transactions.collectAsState(initial = emptyList())
+    val income by viewModel.income.collectAsState(initial = 0L)
+    val expense by viewModel.expense.collectAsState(initial = 0L)
+    var showAdd by remember { mutableStateOf(false) }
+
+    BackHandler { onBack() }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("دخل و هزینه") },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "بازگشت") } },
+                actions = { IconButton(onClick = { showAdd = true }) { Icon(Icons.Default.Add, "تراکنش جدید") } }
+            )
+        },
+        floatingActionButton = { FloatingActionButton(onClick = { showAdd = true }) { Icon(Icons.Default.Add, "تراکنش جدید") } }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            item {
+                Spacer(Modifier.height(12.dp))
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("مانده", style = MaterialTheme.typography.labelLarge)
+                        Text(PersianFormat.toman(income - expense), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Text("دریافت: " + PersianFormat.toman(income))
+                        Text("پرداخت: " + PersianFormat.toman(expense))
+                    }
+                }
+            }
+            items(transactions, key = { it.id }) { transaction ->
+                FinanceTransactionCard(transaction, viewModel)
+            }
+            item { Spacer(Modifier.height(30.dp)) }
+        }
+    }
+
+    if (showAdd) {
+        AddTransactionDialog(
+            onDismiss = { showAdd = false },
+            onSave = { title, amount, type, category, date ->
+                viewModel.addTransaction(title, amount, type, category, date)
+                showAdd = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun FinanceTransactionCard(transaction: FinanceTransactionEntity, viewModel: FinanceViewModel) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+        Row(Modifier.fillMaxWidth().padding(14.dp)) {
+            Column(Modifier.weight(1f)) {
+                Text(transaction.title.ifBlank { transaction.category }, fontWeight = FontWeight.Medium)
+                Text(transaction.category, style = MaterialTheme.typography.labelSmall)
+                Text(PersianFormat.jalaliDate(transaction.transactionAt), style = MaterialTheme.typography.bodySmall)
+            }
+            Column {
+                Text(
+                    (if (transaction.type == FinanceTransactionEntity.TYPE_INCOME) "+" else "−") +
+                        PersianFormat.toman(transaction.amountToman),
+                    color = if (transaction.type == FinanceTransactionEntity.TYPE_INCOME)
+                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.SemiBold
+                )
+                TextButton(onClick = { viewModel.delete(transaction) }) { Text("حذف") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddTransactionDialog(
+    onDismiss: () -> Unit,
+    onSave: (String, Long, String, String, Long) -> Unit
+) {
+    var title by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(FinanceTransactionEntity.TYPE_EXPENSE) }
+    var category by remember { mutableStateOf("سایر") }
+    var date by remember { mutableStateOf(System.currentTimeMillis()) }
+    val context = LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("تراکنش جدید") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(title, { title = it }, Modifier.fillMaxWidth(), label = { Text("عنوان") })
+                OutlinedTextField(
+                    amount,
+                    { amount = it.filter { c -> c.isDigit() || c in '۰'..'۹' } },
+                    Modifier.fillMaxWidth(),
+                    label = { Text("مبلغ به تومان") },
+                    supportingText = { Text("فقط عدد وارد کن") }
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(type == FinanceTransactionEntity.TYPE_EXPENSE, { type = FinanceTransactionEntity.TYPE_EXPENSE }, label = { Text("هزینه") })
+                    FilterChip(type == FinanceTransactionEntity.TYPE_INCOME, { type = FinanceTransactionEntity.TYPE_INCOME }, label = { Text("درآمد") })
+                }
+                OutlinedTextField(category, { category = it }, Modifier.fillMaxWidth(), label = { Text("دسته‌بندی") })
+                TextButton(onClick = {
+                    pickJalaliDateTime(context, date) { date = it }
+                }) { Text("تاریخ: " + PersianFormat.jalaliDate(date)) }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val normalized = PersianFormat.latinDigits(amount).replace("٬", "").replace(",", "").toLongOrNull() ?: 0L
+                if (normalized > 0) onSave(title, normalized, type, category.ifBlank { "سایر" }, date)
+            }) { Text("ثبت") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("انصراف") } }
+    )
+}
+
+private fun pickJalaliDateTime(
     context: android.content.Context,
     initialMillis: Long,
     onSelected: (Long) -> Unit
 ) {
-    val calendar = Calendar.getInstance().apply { timeInMillis = initialMillis }
-    DatePickerDialog(
-        context,
-        { _, year, month, day ->
-            TimePickerDialog(
-                context,
-                { _, hour, minute ->
-                    val selected = Calendar.getInstance().apply {
-                        set(year, month, day, hour, minute, 0)
-                        set(Calendar.MILLISECOND, 0)
-                    }
-                    onSelected(selected.timeInMillis)
-                },
-                calendar.get(Calendar.HOUR_OF_DAY),
-                calendar.get(Calendar.MINUTE),
-                true
-            ).show()
-        },
-        calendar.get(Calendar.YEAR),
-        calendar.get(Calendar.MONTH),
-        calendar.get(Calendar.DAY_OF_MONTH)
-    ).show()
+    val initial = Calendar.getInstance().apply { timeInMillis = initialMillis }
+    val current = PersianFormat.currentJalali()
+    val fields = arrayOf(
+        android.widget.EditText(context).apply { hint = "سال شمسی"; setText(current.first.toString()) },
+        android.widget.EditText(context).apply { hint = "ماه"; setText(current.second.toString()) },
+        android.widget.EditText(context).apply { hint = "روز"; setText(current.third.toString()) }
+    )
+    val container = android.widget.LinearLayout(context).apply {
+        orientation = android.widget.LinearLayout.VERTICAL
+        setPadding(48, 8, 48, 0)
+        fields.forEach { addView(it) }
+    }
+    android.app.AlertDialog.Builder(context)
+        .setTitle("تاریخ شمسی")
+        .setView(container)
+        .setNegativeButton("انصراف", null)
+        .setPositiveButton("تأیید") { _, _ ->
+            val y = fields[0].text.toString().toIntOrNull() ?: current.first
+            val m = fields[1].text.toString().toIntOrNull() ?: current.second
+            val d = fields[2].text.toString().toIntOrNull() ?: current.third
+            onSelected(PersianFormat.jalaliToMillis(y, m, d, initial.get(Calendar.HOUR_OF_DAY), initial.get(Calendar.MINUTE)))
+        }
+        .show()
 }
-
-private fun formatDateTime(millis: Long): String =
-    DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(millis))
