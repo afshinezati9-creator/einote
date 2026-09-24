@@ -12,6 +12,14 @@ interface NoteBlockDao {
     @Query("SELECT * FROM note_blocks WHERE noteId = :noteId ORDER BY position ASC, id ASC")
     fun observeForNote(noteId: Long): Flow<List<NoteBlockEntity>>
 
+    @Query("""
+        SELECT * FROM note_blocks
+        WHERE type = 'CHECKLIST'
+        AND dueAt IS NOT NULL
+        ORDER BY checked ASC, dueAt ASC, position ASC
+    """)
+    fun observePlanned(): Flow<List<NoteBlockEntity>>
+
     @Insert
     suspend fun insert(block: NoteBlockEntity): Long
 
@@ -25,5 +33,5 @@ interface NoteBlockDao {
     suspend fun deleteForNote(noteId: Long)
 
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM note_blocks WHERE noteId = :noteId")
-    suspend fun nextPosition(noteId: Long): Int
+    suspend fun nextPosition(noteId: Long)
 }
