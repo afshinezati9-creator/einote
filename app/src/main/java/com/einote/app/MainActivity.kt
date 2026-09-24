@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -558,8 +559,6 @@ private fun HomeScreen(
                 }
             }
     }
-    val visibleNotes = remember(notes, pinnedFirst, showArchived, pinnedOnly, archivedOnly, selectedTag, sort) {
-        notes.filter { showArchived || !it.isArchived }
             .filter { !pinnedOnly || it.isPinned }
             .filter { !archivedOnly || it.isArchived }
             .filter { selectedTag == null || it.tags.split(',', '،').any { t -> t.trim().replace('ي','ی').replace('ك','ک') == selectedTag } }
