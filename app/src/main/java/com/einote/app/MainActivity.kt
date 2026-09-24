@@ -24,6 +24,15 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.layout.Arrangement
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import com.einote.app.security.SecurityManager
+import com.einote.app.ui.SecurityViewModel
+import com.einote.app.ui.SettingsViewModel
+import com.einote.app.ui.EiNoteTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,20 +60,68 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
+    val context = LocalContext.current
+    val settingsViewModel: SettingsViewModel = viewModel()
+    val securityViewModel: SecurityViewModel = viewModel()
+    val darkMode by settingsViewModel.darkMode.collectAsState()
+    val accent by settingsViewModel.accent.collectAsState()
+    val textScale by settingsViewModel.textScale.collectAsState()
+
     var editingId by remember { mutableStateOf<Long?>(null) }
     var plannerOpen by remember { mutableStateOf(false) }
     var financeOpen by remember { mutableStateOf(false) }
     var backupOpen by remember { mutableStateOf(false) }
+    var settingsOpen by remember { mutableStateOf(false) }
+    var securityOpen by remember { mutableStateOf(false) }
+    var locked by remember { mutableStateOf(false) }
+    var backgroundAt by remember { mutableLongStateOf(0L) }
     val backupViewModel: BackupViewModel = viewModel()
     val financeViewModel: FinanceViewModel = viewModel()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
-    fun askNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= 33) permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    LaunchedEffect(Unit) {
+        if (SecurityManager(context).isLockEnabled() && SecurityManager(context).hasPin()) {
+            locked = true
+        }
     }
 
-    MaterialTheme {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                if (SecurityManager(context).isLockEnabled()) {
+                    backgroundAt = System.currentTimeMillis()
+                }
+            } else if (event == Lifecycle.Event.ON_START && backgroundAt > 0L) {
+                val minutes = securityViewModel.autoLockMinutes.value
+                if (System.currentTimeMillis() - backgroundAt >= minutes * 60_000L &&
+                    SecurityManager(context).isLockEnabled() &&
+                    SecurityManager(context).hasPin()
+                ) {
+                    locked = true
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    fun askNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= 33 && settingsViewModel.notifications.value) {
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    EiNoteTheme(darkMode, accent, textScale) {
         when {
+            locked -> LockScreen(
+                viewModel = securityViewModel,
+                onUnlocked = { locked = false },
+                onBiometric = {
+                    val activity = context as? Activity
+                    if (activity != null) showBiometric(activity) { locked = false }
+                }
+            )
             editingId != null -> NoteEditor(
                 noteId = editingId!!,
                 viewModel = viewModel,
@@ -75,13 +132,9 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
             financeOpen -> FinanceScreen(financeViewModel, onBack = { financeOpen = false })
             backupOpen -> BackupScreen(backupViewModel, onBack = { backupOpen = false })
             securityOpen -> SecurityScreen(securityViewModel, onBack = { securityOpen = false })
-            locked -> LockScreen(
-                viewModel = securityViewModel,
-                onUnlocked = { locked = false },
-                onBiometric = {
-                    val activity = context as? Activity
-                    if (activity != null) showBiometric(activity) { locked = false }
-                }
+            settingsOpen -> SettingsScreen(
+                viewModel = settingsViewModel,
+                onBack = { settingsOpen = false }
             )
             else -> HomeScreen(
                 viewModel = viewModel,
@@ -90,13 +143,12 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
                 onPlanner = { plannerOpen = true },
                 onFinance = { financeOpen = true },
                 onBackup = { backupOpen = true },
-                onSecurity = { securityOpen = true }
+                onSecurity = { securityOpen = true },
+                onSettings = { settingsOpen = true }
             )
         }
     }
 }
-
-
 
 private fun showBiometric(activity: Activity, onSuccess: () -> Unit) {
     val manager = BiometricManager.from(activity)
@@ -172,6 +224,142 @@ private fun LockScreen(
             }
             message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
+    val darkMode by viewModel.darkMode.collectAsState()
+    val accent by viewModel.accent.collectAsState()
+    val textScale by viewModel.textScale.collectAsState()
+    val pinnedFirst by viewModel.pinnedFirst.collectAsState()
+    val showArchived by viewModel.showArchived.collectAsState()
+    val notifications by viewModel.notifications.collectAsState()
+    val compactBlocks by viewModel.compactBlocks.collectAsState()
+
+    BackHandler { onBack() }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("تنظیمات") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "بازگشت") }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Spacer(Modifier.height(10.dp))
+                Text("ظاهر برنامه", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            }
+            item {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Column(Modifier.weight(1f)) {
+                                Text("حالت تاریک", fontWeight = FontWeight.Medium)
+                                Text("ظاهر آرام‌تر برای استفاده در نور کم.", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Switch(checked = darkMode, onCheckedChange = viewModel::setDarkMode)
+                        }
+                        Text("رنگ تأکیدی", fontWeight = FontWeight.Medium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(
+                                "blue" to "آبی",
+                                "purple" to "بنفش",
+                                "green" to "سبز",
+                                "orange" to "نارنجی"
+                            ).forEach { (value, label) ->
+                                FilterChip(
+                                    selected = accent == value,
+                                    onClick = { viewModel.setAccent(value) },
+                                    label = { Text(label) }
+                                )
+                            }
+                        }
+                        Text("اندازه متن", fontWeight = FontWeight.Medium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(0.9f to "کوچک", 1f to "معمولی", 1.1f to "بزرگ", 1.2f to "خیلی بزرگ").forEach { (value, label) ->
+                                FilterChip(
+                                    selected = textScale == value,
+                                    onClick = { viewModel.setTextScale(value) },
+                                    label = { Text(label) }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                Text("صفحه اصلی و یادداشت", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            }
+            item {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        SettingSwitchRow(
+                            title = "یادداشت‌های سنجاق‌شده اول نمایش داده شوند",
+                            checked = pinnedFirst,
+                            onCheckedChange = viewModel::setPinnedFirst
+                        )
+                        SettingSwitchRow(
+                            title = "نمایش یادداشت‌های بایگانی‌شده",
+                            checked = showArchived,
+                            onCheckedChange = viewModel::setShowArchived
+                        )
+                        SettingSwitchRow(
+                            title = "بلوک‌های فشرده",
+                            checked = compactBlocks,
+                            onCheckedChange = viewModel::setCompactBlocks
+                        )
+                    }
+                }
+            }
+            item {
+                Text("اعلان‌ها", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            }
+            item {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    SettingSwitchRow(
+                        title = "اعلان یادآوری‌ها",
+                        checked = notifications,
+                        onCheckedChange = viewModel::setNotifications
+                    )
+                }
+            }
+            item {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("فونت", fontWeight = FontWeight.Medium)
+                        Text(
+                            "پشتیبانی RTL و فارسی فعال است. فونت فارسی Bundled در مرحله بعدی تکمیل انتشار منابع اضافه می‌شود.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(30.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(title, Modifier.weight(1f))
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -256,7 +444,8 @@ private fun HomeScreen(
     onPlanner: () -> Unit,
     onFinance: () -> Unit,
     onBackup: () -> Unit,
-    onSecurity: () -> Unit
+    onSecurity: () -> Unit,
+    onSettings: () -> Unit
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
     val query by viewModel.searchQuery.collectAsState()
@@ -289,6 +478,7 @@ private fun HomeScreen(
                         IconButton(onClick = onFinance) { Icon(Icons.Default.AccountBalanceWallet, "مالی") }
                         IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
                         IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
+                        IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "تنظیمات") }
                         IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
                     }
                 )
