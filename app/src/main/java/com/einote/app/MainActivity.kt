@@ -25,6 +25,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -445,11 +446,19 @@ private fun HomeScreen(
     onFinance: () -> Unit,
     onBackup: () -> Unit,
     onSecurity: () -> Unit,
-    onSettings: () -> Unit
+    onSettings: () -> Unit,
+    settingsViewModel: SettingsViewModel = viewModel()
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
     val query by viewModel.searchQuery.collectAsState()
+    val pinnedFirst by settingsViewModel.pinnedFirst.collectAsState()
+    val showArchived by settingsViewModel.showArchived.collectAsState()
     var searchOpen by remember { mutableStateOf(false) }
+    val visibleNotes = remember(notes, pinnedFirst, showArchived) {
+        notes
+            .filter { showArchived || !it.isArchived }
+            .let { list -> if (pinnedFirst) list.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenByDescending { it.updatedAt }) else list }
+    }
 
     Scaffold(
         topBar = {
@@ -493,14 +502,14 @@ private fun HomeScreen(
             Text("دفتر من", style = MaterialTheme.typography.headlineMedium)
             Text(if (query.isBlank()) "هر چیزی که می‌خواهی، همین‌جا." else "نتیجه‌های جستجو")
             Spacer(Modifier.height(18.dp))
-            if (notes.isEmpty()) {
+            if (visibleNotes.isEmpty()) {
                 Text(if (query.isBlank()) "هنوز یادداشتی نداری." else "چیزی پیدا نشد.")
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(notes, key = { it.id }) { note ->
+                    items(visibleNotes, key = { it.id }) { note ->
                         NoteCard(
                             note = note,
                             onOpen = { onOpen(note.id) },
