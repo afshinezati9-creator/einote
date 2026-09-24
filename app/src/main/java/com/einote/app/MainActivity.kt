@@ -730,7 +730,6 @@ private fun PlannedBlockCard(block: NoteBlockEntity, viewModel: NoteViewModel) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NoteEditor(
     noteId: Long,
@@ -888,7 +887,7 @@ private fun NoteEditor(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     placeholder = { Text("برچسب‌ها را بنویس؛ مثلاً کار، ایده، شخصی") },
-                    leadingIcon = { Icon(Icons.Default.LabelOutline, null) },
+                    leadingIcon = { Icon(Icons.Default.Label, null) },
                     shape = RoundedCornerShape(18.dp)
                 )
             }
