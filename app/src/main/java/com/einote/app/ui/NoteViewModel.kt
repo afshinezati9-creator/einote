@@ -33,7 +33,35 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     @OptIn(ExperimentalCoroutinesApi::class)
     val notes = query.flatMapLatest(repository::observeNotes)
 
-    fun setSearchQuery(value: String) { query.value = value }
+    private val pinnedOnly = MutableStateFlow(false)
+    val pinnedOnlyFilter: StateFlow<Boolean> = pinnedOnly.asStateFlow()
+    private val archivedOnly = MutableStateFlow(false)
+    val archivedOnlyFilter: StateFlow<Boolean> = archivedOnly.asStateFlow()
+    private val selectedTag = MutableStateFlow<String?>(null)
+    val selectedTagFilter: StateFlow<String?> = selectedTag.asStateFlow()
+    private val sort = MutableStateFlow(SORT_UPDATED)
+    val sortFilter: StateFlow<String> = sort.asStateFlow()
+
+    fun setSearchQuery(value: String) { query.value = normalize(value) }
+    fun setPinnedOnly(value: Boolean) { pinnedOnly.value = value }
+    fun setArchivedOnly(value: Boolean) { archivedOnly.value = value }
+    fun setSelectedTag(value: String?) { selectedTag.value = value?.trim()?.takeIf { it.isNotBlank() } }
+    fun setSort(value: String) { sort.value = value }
+    fun clearFilters() {
+        pinnedOnly.value = false
+        archivedOnly.value = false
+        selectedTag.value = null
+        sort.value = SORT_UPDATED
+    }
+
+    companion object {
+        const val SORT_UPDATED = "updated"
+        const val SORT_CREATED = "created"
+        const val SORT_TITLE = "title"
+        private fun normalize(value: String): String = value
+            .replace('ي', 'ی').replace('ى', 'ی').replace('ك', 'ک')
+            .replace(Regex("\\s+"), " ").trim()
+    }
 
     fun createNote(onCreated: (Long) -> Unit) {
         viewModelScope.launch {
@@ -96,7 +124,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun archive(note: NoteEntity, onDone: () -> Unit = {}) = viewModelScope.launch {
-        repository.archive(note.id)
+        repository.setArchived(note.id, !note.isArchived)
         onDone()
     }
 }
