@@ -29,6 +29,7 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.0")
     ksp("androidx.room:room-compiler:2.7.0")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
+    implementation("androidx.biometric:biometric:1.2.0-alpha05")
     implementation("io.coil-kt:coil-compose:2.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
