@@ -26,7 +26,7 @@ import java.util.zip.ZipOutputStream
 class BackupManager(private val context: Context) {
     companion object {
         const val FORMAT_VERSION = 1
-        private const val SCHEMA_VERSION = 6
+        private const val SCHEMA_VERSION = 7
         private const val MANIFEST = "manifest.json"
         private const val NOTES = "data/notes.json"
         private const val BLOCKS = "data/blocks.json"
@@ -178,7 +178,7 @@ class BackupManager(private val context: Context) {
         if (manifest.formatVersion != FORMAT_VERSION) {
             throw BackupException("نسخه پشتیبان پشتیبانی نمی‌شود.")
         }
-        if (manifest.schemaVersion != SCHEMA_VERSION) {
+        if (manifest.schemaVersion !in 6..SCHEMA_VERSION) {
             throw BackupException("نسخه ساختار داده این پشتیبان با این نسخه ای‌نوت سازگار نیست.")
         }
         if (manifest.notesCount != notes.size ||
@@ -235,6 +235,8 @@ class BackupManager(private val context: Context) {
                 .put("title", it.title)
                 .put("content", it.content)
                 .put("tags", it.tags)
+                .put("space", it.space)
+                .put("color", it.color)
                 .put("isPinned", it.isPinned)
                 .put("isArchived", it.isArchived)
                 .put("createdAt", it.createdAt)
@@ -302,14 +304,16 @@ class BackupManager(private val context: Context) {
         (0 until array.length()).map { i ->
             array.getJSONObject(i).let {
                 NoteEntity(
-                    it.getLong("id"),
-                    it.getString("title"),
-                    it.getString("content"),
-                    it.getString("tags"),
-                    it.getBoolean("isPinned"),
-                    it.getBoolean("isArchived"),
-                    it.getLong("createdAt"),
-                    it.getLong("updatedAt")
+                    id = it.getLong("id"),
+                    title = it.getString("title"),
+                    content = it.getString("content"),
+                    tags = it.getString("tags"),
+                    space = it.optString("space", "WRITING"),
+                    color = it.optString("color", "default"),
+                    isPinned = it.getBoolean("isPinned"),
+                    isArchived = it.getBoolean("isArchived"),
+                    createdAt = it.getLong("createdAt"),
+                    updatedAt = it.getLong("updatedAt")
                 )
             }
         }
