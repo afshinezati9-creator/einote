@@ -7,7 +7,7 @@ class NoteRepository(
     private val blockDao: NoteBlockDao,
     private val attachmentDao: AttachmentDao
 ) {
-    fun observeNotes(query: String): Flow<List<NoteEntity>> = dao.observeNotes(query)
+    fun observeNotes(query: String, space: String): Flow<List<NoteEntity>> = dao.observeNotes(query, space)
     suspend fun getById(id: Long): NoteEntity? = dao.getById(id)
     fun observeBlocks(noteId: Long): Flow<List<NoteBlockEntity>> = blockDao.observeForNote(noteId)
     fun observePlannedBlocks(): Flow<List<NoteBlockEntity>> = blockDao.observePlanned()
