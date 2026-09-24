@@ -4,6 +4,11 @@ import android.Manifest
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -12,6 +17,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -38,6 +51,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.core.content.ContextCompat
+import androidx.core.text.HtmlCompat
 import com.einote.app.security.SecurityManager
 import com.einote.app.ui.SecurityViewModel
 import com.einote.app.ui.SettingsViewModel
@@ -1593,17 +1607,14 @@ private fun DraggableBlockEditor(
     var dragOffset by remember(block.id) { mutableFloatStateOf(0f) }
     val currentIndex = remember { mutableIntStateOf(index) }
 
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
                 translationY = if (dragOffset != 0f) dragOffset else 0f
                 shadowElevation = if (dragOffset != 0f) 18f else 0f
             },
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        color = Color.Transparent
     ) {
         Row(Modifier.fillMaxWidth()) {
             Box(
@@ -1677,6 +1688,7 @@ private fun DraggableBlockEditor(
     }
 }
 
+
 @Composable
 private fun StyledBlockEditor(
     block: NoteBlockEntity,
@@ -1685,7 +1697,7 @@ private fun StyledBlockEditor(
     onDeleteAudio: () -> Unit,
     onReminderScheduled: () -> Unit
 ) {
-    var value by remember(block.id, block.content) { mutableStateOf(block.content) }
+    var value by remember(block.id, block.content) { mutableStateOf(richTextToFieldValue(block.content)) }
     var checked by remember(block.id, block.checked) { mutableStateOf(block.checked) }
     var showTools by remember(block.id) { mutableStateOf(false) }
     val context = LocalContext.current
@@ -1694,84 +1706,65 @@ private fun StyledBlockEditor(
 
     if (block.type == BlockType.AUDIO.name || block.type == BlockType.IMAGE.name) {
         if (attachment != null) {
-            if (block.type == BlockType.AUDIO.name) {
-                AudioBlockEditor(
-                    attachment = attachment,
-                    onDelete = onDeleteAudio
-                )
-            } else {
-                ImageBlockEditor(
-                    attachment = attachment,
-                    onDelete = onDeleteAudio
-                )
-            }
+            if (block.type == BlockType.AUDIO.name) AudioBlockEditor(attachment, onDeleteAudio)
+            else ImageBlockEditor(attachment, onDeleteAudio)
         } else {
-            Card(
-                Modifier.fillMaxWidth().padding(12.dp),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(14.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Icon(
-                        if (block.type == BlockType.IMAGE.name) Icons.Default.Image else Icons.Default.GraphicEq,
-                        null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
+            Card(Modifier.fillMaxWidth().padding(12.dp), shape = RoundedCornerShape(18.dp)) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Icon(if (block.type == BlockType.IMAGE.name) Icons.Default.Image else Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        if (block.type == BlockType.IMAGE.name) "فایل تصویری پیدا نشد" else "فایل صوتی پیدا نشد",
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    IconButton(onClick = onDeleteAudio) {
-                        Icon(Icons.Default.DeleteOutline, "حذف بلوک صوتی")
-                    }
+                    Text(if (block.type == BlockType.IMAGE.name) "فایل تصویری پیدا نشد" else "فایل صوتی پیدا نشد", Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                    IconButton(onClick = onDeleteAudio) { Icon(Icons.Default.DeleteOutline, "حذف بلوک") }
                 }
             }
         }
         return
     }
 
-    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(
                 when (block.type) {
                     BlockType.CHECKLIST.name -> "چک‌لیست"
                     BlockType.BULLET.name -> "فهرست"
                     else -> "متن"
                 },
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = { showTools = !showTools }) {
-                Icon(Icons.Default.Tune, "قالب‌بندی")
+            IconButton(onClick = { showTools = !showTools }, modifier = Modifier.size(34.dp)) {
+                Icon(if (showTools) Icons.Default.ExpandLess else Icons.Default.Tune, "قالب‌بندی")
             }
-            IconButton(onClick = { viewModel.deleteBlock(block) }) {
+            IconButton(onClick = { viewModel.deleteBlock(block) }, modifier = Modifier.size(34.dp)) {
                 Icon(Icons.Default.DeleteOutline, "حذف")
             }
         }
 
         if (showTools) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-                Text("اندازه", style = MaterialTheme.typography.labelMedium)
-                Slider(
-                    value = size,
-                    onValueChange = { viewModel.updateBlock(block.copy(textSizeSp = it)) },
-                    valueRange = 13f..32f,
-                    modifier = Modifier.weight(1f)
-                )
+            RichTextToolbar(
+                value = value,
+                alignment = block.alignment,
+                onToggleBold = {
+                    value = toggleInlineStyle(value, InlineStyle.BOLD)
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(value)))
+                },
+                onToggleItalic = {
+                    value = toggleInlineStyle(value, InlineStyle.ITALIC)
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(value)))
+                },
+                onToggleUnderline = {
+                    value = toggleInlineStyle(value, InlineStyle.UNDERLINE)
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(value)))
+                },
+                onAlignment = { viewModel.updateBlock(block.copy(alignment = it)) }
+            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("اندازه", style = MaterialTheme.typography.labelSmall)
+                Slider(value = size, onValueChange = { viewModel.updateBlock(block.copy(textSizeSp = it)) }, valueRange = 13f..32f, modifier = Modifier.weight(1f))
                 Text(PersianFormat.digits(size.toInt().toLong()), style = MaterialTheme.typography.labelSmall)
             }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
                     MaterialTheme.colorScheme.onSurface,
                     MaterialTheme.colorScheme.primary,
@@ -1781,61 +1774,47 @@ private fun StyledBlockEditor(
                     Color(0xFFF59E0B)
                 ).forEach { color ->
                     Box(
-                        Modifier
-                            .size(28.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(color)
-                            .clickable {
-                                viewModel.updateBlock(block.copy(textColor = color.value.toLong()))
-                            }
+                        Modifier.size(26.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color).clickable {
+                            viewModel.updateBlock(block.copy(textColor = color.value.toLong()))
+                        }
                     )
                 }
             }
         }
 
+        val editor: @Composable (Modifier) -> Unit = { modifier ->
+            RichEditorField(
+                value = value,
+                onValueChange = {
+                    value = it
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(it)))
+                },
+                textColor = textColor,
+                size = size,
+                alignment = block.alignment,
+                placeholder = if (block.type == BlockType.BULLET.name) "آیتم فهرست…" else if (block.type == BlockType.CHECKLIST.name) "یک کار بنویس…" else "اینجا بنویس…",
+                modifier = modifier
+            )
+        }
+
         if (block.type == BlockType.CHECKLIST.name) {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
                 Checkbox(
                     checked = checked,
                     onCheckedChange = {
                         checked = it
-                        viewModel.updateBlock(
-                            block.copy(
-                                checked = it,
-                                completedAt = if (it) System.currentTimeMillis() else null
-                            )
-                        )
+                        viewModel.updateBlock(block.copy(checked = it, completedAt = if (it) System.currentTimeMillis() else null))
                         if (it) viewModel.cancelReminder(block.id)
                     }
                 )
-                BasicEditorField(
-                    value = value,
-                    onValueChange = {
-                        value = it
-                        viewModel.updateBlock(block.copy(content = it))
-                    },
-                    textColor = textColor,
-                    size = size,
-                    placeholder = "یک کار بنویس…",
-                    modifier = Modifier.weight(1f)
-                )
+                editor(Modifier.weight(1f))
             }
         } else {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.Top) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
                 if (block.type == BlockType.BULLET.name) {
                     Text("•", fontSize = size.sp, color = textColor, modifier = Modifier.padding(top = 8.dp, end = 8.dp))
                 }
-                BasicEditorField(
-                    value = value,
-                    onValueChange = {
-                        value = it
-                        viewModel.updateBlock(block.copy(content = it))
-                    },
-                    textColor = textColor,
-                    size = size,
-                    placeholder = if (block.type == BlockType.BULLET.name) "آیتم فهرست…" else "اینجا بنویس…",
-                    modifier = Modifier.weight(1f)
-                )
+                editor(Modifier.weight(1f))
             }
         }
 
@@ -1864,37 +1843,199 @@ private fun StyledBlockEditor(
     }
 }
 
+private enum class InlineStyle { BOLD, ITALIC, UNDERLINE }
+
 @Composable
-private fun BasicEditorField(
-    value: String,
-    onValueChange: (String) -> Unit,
+private fun RichTextToolbar(
+    value: TextFieldValue,
+    alignment: String,
+    onToggleBold: () -> Unit,
+    onToggleItalic: () -> Unit,
+    onToggleUnderline: () -> Unit,
+    onAlignment: (String) -> Unit
+) {
+    val hasSelection = value.selection.start != value.selection.end
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        RichFormatButton("B", hasSelection && rangeHasInlineStyle(value.annotatedString, value.selection, InlineStyle.BOLD), onToggleBold)
+        RichFormatButton("I", hasSelection && rangeHasInlineStyle(value.annotatedString, value.selection, InlineStyle.ITALIC), onToggleItalic, italic = true)
+        RichFormatButton("U", hasSelection && rangeHasInlineStyle(value.annotatedString, value.selection, InlineStyle.UNDERLINE), onToggleUnderline, underline = true)
+        VerticalDivider(Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        AlignmentButton(Icons.Default.FormatAlignRight, "راست‌چین", alignment == "right") { onAlignment("right") }
+        AlignmentButton(Icons.Default.FormatAlignCenter, "وسط‌چین", alignment == "center") { onAlignment("center") }
+        AlignmentButton(Icons.Default.FormatAlignLeft, "چپ‌چین", alignment == "left") { onAlignment("left") }
+        AlignmentButton(Icons.Default.FormatTextdirectionRToL, "خودکار", alignment == "auto") { onAlignment("auto") }
+    }
+}
+
+@Composable
+private fun RichFormatButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    italic: Boolean = false,
+    underline: Boolean = false
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(9.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+    ) {
+        Text(
+            label,
+            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            fontWeight = if (label == "B") FontWeight.Bold else FontWeight.Medium,
+            fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
+            textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None
+        )
+    }
+}
+
+@Composable
+private fun AlignmentButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Icon(icon, description, tint = if (selected) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+    }
+}
+
+@Composable
+private fun RichEditorField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     textColor: Color,
     size: Float,
+    alignment: String,
     placeholder: String,
     modifier: Modifier
 ) {
+    val align = when (alignment) {
+        "left" -> TextAlign.Left
+        "center" -> TextAlign.Center
+        "right" -> TextAlign.Right
+        else -> TextAlign.Start
+    }
     androidx.compose.foundation.text.BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 110.dp),
-        textStyle = androidx.compose.ui.text.TextStyle(
+        modifier = modifier.fillMaxWidth().heightIn(min = 86.dp),
+        textStyle = TextStyle(
             color = textColor,
             fontSize = size.sp,
-            lineHeight = (size * 1.55f).sp
+            lineHeight = (size * 1.55f).sp,
+            textAlign = align,
+            textDirection = TextDirection.Content
         ),
         decorationBox = { inner ->
-            if (value.isBlank()) {
-                Text(
-                    placeholder,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                    fontSize = size.sp
-                )
+            if (value.text.isBlank()) {
+                Text(placeholder, Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f), fontSize = size.sp, textAlign = align)
             }
             inner()
         }
     )
+}
+
+private fun richTextToFieldValue(content: String): TextFieldValue {
+    if (content.isBlank()) return TextFieldValue("")
+    if (!content.trimStart().startsWith("<")) return TextFieldValue(content)
+    return runCatching {
+        TextFieldValue(spannedToAnnotatedString(HtmlCompat.fromHtml(content, HtmlCompat.FROM_HTML_MODE_LEGACY)))
+    }.getOrElse { TextFieldValue(content) }
+}
+
+private fun spannedToAnnotatedString(spanned: Spanned): AnnotatedString {
+    val builder = AnnotatedString.Builder(spanned.toString())
+    spanned.getSpans(0, spanned.length, Any::class.java).forEach { span ->
+        val start = spanned.getSpanStart(span).coerceAtLeast(0)
+        val end = spanned.getSpanEnd(span).coerceAtMost(spanned.length)
+        if (start >= end) return@forEach
+        when (span) {
+            is StyleSpan -> when (span.style) {
+                android.graphics.Typeface.BOLD -> builder.addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, end)
+                android.graphics.Typeface.ITALIC -> builder.addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
+                android.graphics.Typeface.BOLD_ITALIC -> builder.addStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic), start, end)
+            }
+            is UnderlineSpan -> builder.addStyle(SpanStyle(textDecoration = TextDecoration.Underline), start, end)
+            is StrikethroughSpan -> builder.addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), start, end)
+            is ForegroundColorSpan -> builder.addStyle(SpanStyle(color = Color(span.foregroundColor)), start, end)
+        }
+    }
+    return builder.toAnnotatedString()
+}
+
+private fun fieldValueToHtml(value: TextFieldValue): String {
+    val annotated = value.annotatedString
+    if (annotated.text.isBlank()) return ""
+    val out = StringBuilder()
+    var i = 0
+    while (i < annotated.length) {
+        val styles = annotated.spanStyles.filter { it.start <= i && it.end > i }.map { it.item }
+        var end = i + 1
+        while (end < annotated.length) {
+            val next = annotated.spanStyles.filter { it.start <= end && it.end > end }.map { it.item }
+            if (next != styles) break
+            end++
+        }
+        var text = android.text.TextUtils.htmlEncode(annotated.text.substring(i, end)).replace("
+", "<br>")
+        val style = mergeSpanStyles(styles)
+        if (style.fontWeight == FontWeight.Bold) text = "<b>$text</b>"
+        if (style.fontStyle == FontStyle.Italic) text = "<i>$text</i>"
+        if (style.textDecoration?.contains(TextDecoration.Underline) == true) text = "<u>$text</u>"
+        if (style.textDecoration?.contains(TextDecoration.LineThrough) == true) text = "<s>$text</s>"
+        out.append(text)
+        i = end
+    }
+    return out.toString()
+}
+
+private fun mergeSpanStyles(styles: List<SpanStyle>): SpanStyle {
+    var result = SpanStyle()
+    styles.forEach { result = result.merge(it) }
+    return result
+}
+
+private fun rangeHasInlineStyle(annotated: AnnotatedString, selection: TextRange, style: InlineStyle): Boolean {
+    val start = minOf(selection.start, selection.end).coerceIn(0, annotated.length)
+    val end = maxOf(selection.start, selection.end).coerceIn(0, annotated.length)
+    if (start >= end) return false
+    for (i in start until end) {
+        val merged = mergeSpanStyles(annotated.spanStyles.filter { it.start <= i && it.end > i }.map { it.item })
+        val styled = when (style) {
+            InlineStyle.BOLD -> merged.fontWeight == FontWeight.Bold
+            InlineStyle.ITALIC -> merged.fontStyle == FontStyle.Italic
+            InlineStyle.UNDERLINE -> merged.textDecoration?.contains(TextDecoration.Underline) == true
+        }
+        if (!styled) return false
+    }
+    return true
+}
+
+private fun toggleInlineStyle(value: TextFieldValue, style: InlineStyle): TextFieldValue {
+    val start = minOf(value.selection.start, value.selection.end).coerceIn(0, value.text.length)
+    val end = maxOf(value.selection.start, value.selection.end).coerceIn(0, value.text.length)
+    if (start >= end) return value
+    val remove = rangeHasInlineStyle(value.annotatedString, value.selection, style)
+    val builder = AnnotatedString.Builder(value.annotatedString)
+    builder.addStyle(
+        when (style) {
+            InlineStyle.BOLD -> SpanStyle(fontWeight = if (remove) FontWeight.Normal else FontWeight.Bold)
+            InlineStyle.ITALIC -> SpanStyle(fontStyle = if (remove) FontStyle.Normal else FontStyle.Italic)
+            InlineStyle.UNDERLINE -> SpanStyle(textDecoration = if (remove) TextDecoration.None else TextDecoration.Underline)
+        },
+        start,
+        end
+    )
+    return value.copy(annotatedString = builder.toAnnotatedString())
 }
 
 @Composable
