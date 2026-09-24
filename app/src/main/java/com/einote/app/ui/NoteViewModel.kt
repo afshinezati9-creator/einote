@@ -86,8 +86,18 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun addTextBlock(noteId: Long) = viewModelScope.launch { repository.addBlock(noteId, BlockType.TEXT) }
     fun addChecklistBlock(noteId: Long) = viewModelScope.launch { repository.addBlock(noteId, BlockType.CHECKLIST) }
     fun updateBlock(block: NoteBlockEntity) = viewModelScope.launch {
-        repository.updateBlock(block)
+        repository.updateBlock(block.copy(updatedAt = System.currentTimeMillis()))
         scheduleReminder(block)
+    }
+
+    fun moveBlock(blocks: List<NoteBlockEntity>, from: Int, to: Int) = viewModelScope.launch {
+        if (from !in blocks.indices || to !in blocks.indices || from == to) return@launch
+        val ordered = blocks.toMutableList().apply { add(to, removeAt(from)) }
+        ordered.forEachIndexed { index, block ->
+            if (block.position != index) {
+                repository.updateBlockPosition(block.id, index)
+            }
+        }
     }
     fun deleteBlock(block: NoteBlockEntity) = viewModelScope.launch {
         repository.deleteBlock(block)
