@@ -12,6 +12,9 @@ interface NoteBlockDao {
     @Query("SELECT * FROM note_blocks WHERE noteId = :noteId ORDER BY position ASC, id ASC")
     fun observeForNote(noteId: Long): Flow<List<NoteBlockEntity>>
 
+    @Query("SELECT * FROM note_blocks WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): NoteBlockEntity?
+
     @Query("""
         SELECT * FROM note_blocks
         WHERE type = 'CHECKLIST'
