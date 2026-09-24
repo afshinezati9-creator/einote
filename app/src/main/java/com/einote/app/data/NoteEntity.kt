@@ -9,6 +9,8 @@ data class NoteEntity(
     val title: String = "",
     val content: String = "",
     val tags: String = "",
+    val space: String = "WRITING",
+    val color: String = "default",
     val isPinned: Boolean = false,
     val isArchived: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
