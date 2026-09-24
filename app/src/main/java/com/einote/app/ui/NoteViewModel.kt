@@ -93,10 +93,12 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun moveBlock(blocks: List<NoteBlockEntity>, from: Int, to: Int) = viewModelScope.launch {
         if (from !in blocks.indices || to !in blocks.indices || from == to) return@launch
         val ordered = blocks.toMutableList().apply { add(to, removeAt(from)) }
+        persistBlockOrder(ordered)
+    }
+
+    fun persistBlockOrder(ordered: List<NoteBlockEntity>) = viewModelScope.launch {
         ordered.forEachIndexed { index, block ->
-            if (block.position != index) {
-                repository.updateBlockPosition(block.id, index)
-            }
+            if (block.position != index) repository.updateBlockPosition(block.id, index)
         }
     }
     fun deleteBlock(block: NoteBlockEntity) = viewModelScope.launch {
