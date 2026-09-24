@@ -462,6 +462,7 @@ private fun HomeScreen(
     val pinnedOnly by viewModel.pinnedOnlyFilter.collectAsState()
     val archivedOnly by viewModel.archivedOnlyFilter.collectAsState()
     val selectedTag by viewModel.selectedTagFilter.collectAsState()
+    val selectedSpace by viewModel.selectedSpace.collectAsState()
     val sort by viewModel.sortFilter.collectAsState()
     val screenWidth = LocalConfiguration.current.screenWidthDp
     val isPhone = screenWidth < 600
@@ -584,6 +585,33 @@ private fun HomeScreen(
             Spacer(Modifier.height(18.dp)); Text("دفتر من",style=MaterialTheme.typography.headlineMedium)
             Text(when {query.isNotBlank()->"نتیجه‌های جستجو";activeFilters>0->"یادداشت‌های فیلترشده";else->"هر چیزی که می‌خواهی، همین‌جا."})
             if(selectedTag!=null){Spacer(Modifier.height(8.dp));AssistChip(onClick={viewModel.setSelectedTag(null)},label={Text("#$selectedTag")},trailingIcon={Icon(Icons.Default.Close,"حذف")})}
+            Spacer(Modifier.height(10.dp))
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    "WRITING" to "نوشتن",
+                    "PLANNING" to "برنامه‌ریزی",
+                    "FINANCE" to "حساب‌کتاب"
+                ).forEach { (value, label) ->
+                    FilterChip(
+                        selected = selectedSpace == value,
+                        onClick = { viewModel.setSpace(value) },
+                        label = { Text(label) },
+                        leadingIcon = {
+                            Icon(
+                                when (value) {
+                                    "PLANNING" -> Icons.Default.CalendarMonth
+                                    "FINANCE" -> Icons.Default.AccountBalanceWallet
+                                    else -> Icons.Default.Edit
+                                },
+                                null
+                            )
+                        }
+                    )
+                }
+            }
             Spacer(Modifier.height(14.dp))
             if(visibleNotes.isEmpty()) Text(when {query.isNotBlank()->"چیزی پیدا نشد.";activeFilters>0->"یادداشتی با این فیلترها پیدا نشد.";else->"هنوز یادداشتی نداری."})
             else LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(10.dp)){items(visibleNotes,key={it.id}){note->
@@ -592,6 +620,30 @@ private fun HomeScreen(
         }
     }
     if(filtersOpen) NoteFiltersDialog(pinnedOnly,archivedOnly,selectedTag,sort,allTags,viewModel::setPinnedOnly,viewModel::setArchivedOnly,viewModel::setSelectedTag,viewModel::setSort,viewModel::clearFilters,{filtersOpen=false})
+}
+
+@Composable
+private fun NoteSpaceAndColorRow(
+    current: NoteEntity,
+    onSpace: (String) -> Unit,
+    onColor: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("فضای یادداشت", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("WRITING" to "نوشتن", "PLANNING" to "برنامه‌ریزی", "FINANCE" to "حساب‌کتاب").forEach { (value, label) ->
+                FilterChip(selected = current.space == value, onClick = { onSpace(value) }, label = { Text(label) })
+            }
+        }
+        Text("رنگ دفتر", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf("default" to MaterialTheme.colorScheme.primary, "purple" to Color(0xFF7C3AED), "green" to Color(0xFF059669), "orange" to Color(0xFFF59E0B), "pink" to Color(0xFFDB2777)).forEach { (value, color) ->
+                Box(
+                    Modifier.size(28.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color).clickable { onColor(value) }
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -864,7 +916,7 @@ private fun NoteEditor(
     }
 
     val current = note!!
-    LaunchedEffect(current.title, current.tags) {
+    LaunchedEffect(current.title, current.tags, current.space, current.color) {
         delay(450)
         viewModel.saveNote(current)
     }
@@ -1008,6 +1060,11 @@ private fun NoteEditor(
                     placeholder = { Text("عنوان یادداشت") },
                     leadingIcon = { Icon(Icons.Default.Title, null) },
                     shape = RoundedCornerShape(18.dp)
+                )
+                NoteSpaceAndColorRow(
+                    current = current,
+                    onSpace = { value -> note = current.copy(space = value) },
+                    onColor = { value -> note = current.copy(color = value) }
                 )
                 OutlinedTextField(
                     value = current.tags,
