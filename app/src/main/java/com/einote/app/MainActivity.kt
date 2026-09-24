@@ -1697,7 +1697,7 @@ private fun StyledBlockEditor(
     onDeleteAudio: () -> Unit,
     onReminderScheduled: () -> Unit
 ) {
-    var value by remember(block.id, block.content) { mutableStateOf(richTextToFieldValue(block.content)) }
+    var value by remember(block.id) { mutableStateOf(richTextToFieldValue(block.content)) }
     var checked by remember(block.id, block.checked) { mutableStateOf(block.checked) }
     var showTools by remember(block.id) { mutableStateOf(false) }
     val context = LocalContext.current
