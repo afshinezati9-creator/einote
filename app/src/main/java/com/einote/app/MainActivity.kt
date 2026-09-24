@@ -1071,12 +1071,12 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                BackupStat("یادداشت", backup.notesCount)
-                                BackupStat("بلوک", backup.blocksCount)
+                                BackupStat("یادداشت", backup.notesCount, Modifier.weight(1f))
+                                BackupStat("بلوک", backup.blocksCount, Modifier.weight(1f))
                             }
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                BackupStat("تراکنش", backup.financeCount)
-                                BackupStat("پیوست", backup.attachmentsCount)
+                                BackupStat("تراکنش", backup.financeCount, Modifier.weight(1f))
+                                BackupStat("پیوست", backup.attachmentsCount, Modifier.weight(1f))
                             }
                             Text(
                                 "بازیابی جایگزین کامل است؛ بهتر است قبل از ادامه یک پشتیبان از دفتر فعلی هم داشته باشی.",
@@ -1138,9 +1138,9 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun BackupStat(label: String, value: Int) {
+private fun BackupStat(label: String, value: Int, modifier: Modifier = Modifier) {
     Surface(
-        Modifier.weight(1f),
+        modifier,
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
     ) {
