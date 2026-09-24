@@ -559,18 +559,6 @@ private fun HomeScreen(
                 }
             }
     }
-            .filter { !pinnedOnly || it.isPinned }
-            .filter { !archivedOnly || it.isArchived }
-            .filter { selectedTag == null || it.tags.split(',', '،').any { t -> t.trim().replace('ي','ی').replace('ك','ک') == selectedTag } }
-            .let { list ->
-                when (sort) {
-                    NoteViewModel.SORT_CREATED -> list.sortedByDescending { it.createdAt }
-                    NoteViewModel.SORT_TITLE -> list.sortedBy { it.title.trim().ifBlank { "یادداشت بدون عنوان" } }
-                    else -> if (pinnedFirst) list.sortedWith(compareByDescending<NoteEntity>{ it.isPinned }.thenByDescending { it.updatedAt })
-                    else list.sortedByDescending { it.updatedAt }
-                }
-            }
-    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
