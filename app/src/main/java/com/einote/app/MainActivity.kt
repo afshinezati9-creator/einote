@@ -829,6 +829,7 @@ private fun NoteEditor(
     val recordingElapsedMs by attachmentViewModel.recordingElapsedMs.collectAsState()
     var showRecordingPanel by remember { mutableStateOf(false) }
     var recordingPaused by remember { mutableStateOf(false) }
+    var mediaInsertPosition by remember { mutableIntStateOf(blocks.size) }
 
     val screenWidth = LocalConfiguration.current.screenWidthDp
     val isPhone = screenWidth < 600
@@ -838,17 +839,20 @@ private fun NoteEditor(
         uri?.let { attachmentViewModel.addFromUri(noteId, it) }
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { attachmentViewModel.addImageFromUri(noteId, it) }
+        uri?.let { attachmentViewModel.addImageFromUri(noteId, it, mediaInsertPosition) }
     }
     val audioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) attachmentViewModel.startVoiceRecording(noteId)
+        if (granted) attachmentViewModel.startVoiceRecording(noteId, mediaInsertPosition)
     }
 
     LaunchedEffect(noteId) {
         viewModel.getNote(noteId) { note = it; loaded = true }
     }
     LaunchedEffect(blocks) {
-        if (!dragging) orderedBlocks = blocks
+        if (!dragging) {
+            orderedBlocks = blocks
+            mediaInsertPosition = blocks.size
+        }
     }
     BackHandler { onClose() }
 
@@ -957,9 +961,9 @@ private fun NoteEditor(
             NoteComposerToolbar(
                 compact = isPhone,
                 isRecording = isRecording,
-                onText = { viewModel.addTextBlock(noteId) },
-                onChecklist = { viewModel.addChecklistBlock(noteId) },
-                onBullet = { viewModel.addBulletBlock(noteId) },
+                onText = { viewModel.addTextBlockAt(noteId, orderedBlocks.size) },
+                onChecklist = { viewModel.addChecklistBlockAt(noteId, orderedBlocks.size) },
+                onBullet = { viewModel.addBulletBlockAt(noteId, orderedBlocks.size) },
                 onPhoto = {
                     photoPicker.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
@@ -967,6 +971,7 @@ private fun NoteEditor(
                 },
                 onFile = { attachmentPicker.launch(arrayOf("*/*")) },
                 onAudio = {
+                    mediaInsertPosition = orderedBlocks.size
                     if (isRecording) {
                         attachmentViewModel.stopVoiceRecording()
                     } else {
@@ -1046,6 +1051,34 @@ private fun NoteEditor(
                             )
                         }
 
+                        item(key = "insert-after-$index") {
+                            BlockInsertRow(
+                                onText = {
+                                    mediaInsertPosition = index + 1
+                                    viewModel.addTextBlockAt(noteId, index + 1)
+                                },
+                                onChecklist = {
+                                    mediaInsertPosition = index + 1
+                                    viewModel.addChecklistBlockAt(noteId, index + 1)
+                                },
+                                onBullet = {
+                                    mediaInsertPosition = index + 1
+                                    viewModel.addBulletBlockAt(noteId, index + 1)
+                                },
+                                onPhoto = {
+                                    mediaInsertPosition = index + 1
+                                    photoPicker.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                                onAudio = {
+                                    mediaInsertPosition = index + 1
+                                    showRecordingPanel = true
+                                    audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                }
+                            )
+                        }
+
                         item {
                             val audioBlockAttachmentIds = orderedBlocks
                                 .filter { it.type == BlockType.AUDIO.name }
@@ -1089,6 +1122,37 @@ private fun NoteEditor(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BlockInsertRow(
+    onText: () -> Unit,
+    onChecklist: () -> Unit,
+    onBullet: () -> Unit,
+    onPhoto: () -> Unit,
+    onAudio: () -> Unit
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        HorizontalDivider(Modifier.weight(1f))
+        Box {
+            var expanded by remember { mutableStateOf(false) }
+            IconButton(onClick = { expanded = true }) {
+                Icon(Icons.Default.AddCircleOutline, "افزودن بلوک")
+            }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                DropdownMenuItem(text = { Text("متن") }, leadingIcon = { Icon(Icons.Default.TextFields, null) }, onClick = { expanded = false; onText() })
+                DropdownMenuItem(text = { Text("چک‌لیست") }, leadingIcon = { Icon(Icons.Default.CheckBox, null) }, onClick = { expanded = false; onChecklist() })
+                DropdownMenuItem(text = { Text("فهرست") }, leadingIcon = { Icon(Icons.Default.FormatListBulleted, null) }, onClick = { expanded = false; onBullet() })
+                DropdownMenuItem(text = { Text("عکس") }, leadingIcon = { Icon(Icons.Default.Image, null) }, onClick = { expanded = false; onPhoto() })
+                DropdownMenuItem(text = { Text("صدا") }, leadingIcon = { Icon(Icons.Default.GraphicEq, null) }, onClick = { expanded = false; onAudio() })
+            }
+        }
+        HorizontalDivider(Modifier.weight(1f))
     }
 }
 
