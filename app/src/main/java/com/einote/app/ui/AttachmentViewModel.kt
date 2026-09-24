@@ -76,6 +76,16 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         }.isSuccess
     }
 
+    fun pauseVoiceRecording() {
+        if (!_isRecording.value) return
+        runCatching { recorder?.pause() }
+    }
+
+    fun resumeVoiceRecording() {
+        if (!_isRecording.value) return
+        runCatching { recorder?.resume() }
+    }
+
     fun stopVoiceRecording() {
         val activeRecorder = recorder ?: return
         val file = recordingFile
