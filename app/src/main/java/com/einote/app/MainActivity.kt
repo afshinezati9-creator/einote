@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -51,6 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.einote.app.data.BlockType
+import com.einote.app.data.NoteBlockEntity
 import com.einote.app.data.NoteEntity
 import com.einote.app.ui.NoteViewModel
 import kotlinx.coroutines.delay
@@ -283,15 +286,16 @@ private fun NoteEditor(
     var note by remember(noteId) { mutableStateOf<NoteEntity?>(null) }
     var loaded by remember(noteId) { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    val blocks by viewModel.observeBlocks(noteId).collectAsState(initial = emptyList())
 
-    viewModel.getNote(noteId) {
-        note = it
-        loaded = true
+    LaunchedEffect(noteId) {
+        viewModel.getNote(noteId) {
+            note = it
+            loaded = true
+        }
     }
 
-    BackHandler {
-        onClose()
-    }
+    BackHandler { onClose() }
 
     if (!loaded || note == null) {
         Surface(Modifier.fillMaxSize()) {}
@@ -300,20 +304,15 @@ private fun NoteEditor(
 
     val current = note!!
 
-    LaunchedEffect(current.title, current.content, current.tags) {
-        delay(600)
+    LaunchedEffect(current.title, current.tags) {
+        delay(500)
         viewModel.saveNote(current)
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text(
-                        current.title.ifBlank { "یادداشت جدید" },
-                        maxLines = 1
-                    )
-                },
+                title = { Text(current.title.ifBlank { "یادداشت جدید" }, maxLines = 1) },
                 navigationIcon = {
                     IconButton(onClick = onClose) {
                         Icon(Icons.Default.ArrowBack, "بازگشت")
@@ -321,12 +320,28 @@ private fun NoteEditor(
                 },
                 actions = {
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Default.MoreVert, "بیشتر")
+                        Icon(Icons.Default.MoreVert, "ابزارها")
                     }
                     DropdownMenu(
                         expanded = menuOpen,
                         onDismissRequest = { menuOpen = false }
                     ) {
+                        DropdownMenuItem(
+                            text = { Text("متن جدید") },
+                            leadingIcon = { Icon(Icons.Default.Edit, null) },
+                            onClick = {
+                                menuOpen = false
+                                viewModel.addTextBlock(noteId)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("چک‌لیست جدید") },
+                            leadingIcon = { Icon(Icons.Default.Star, null) },
+                            onClick = {
+                                menuOpen = false
+                                viewModel.addChecklistBlock(noteId)
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text(if (current.isPinned) "برداشتن سنجاق" else "سنجاق کردن") },
                             leadingIcon = { Icon(Icons.Default.PushPin, null) },
@@ -334,14 +349,6 @@ private fun NoteEditor(
                                 menuOpen = false
                                 viewModel.togglePin(current)
                                 note = current.copy(isPinned = !current.isPinned)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("بایگانی") },
-                            leadingIcon = { Icon(Icons.Default.Archive, null) },
-                            onClick = {
-                                menuOpen = false
-                                viewModel.archive(current) { onClose() }
                             }
                         )
                         DropdownMenuItem(
@@ -357,57 +364,127 @@ private fun NoteEditor(
             )
         }
     ) { padding ->
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Spacer(Modifier.height(14.dp))
+            item {
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = current.title,
+                    onValueChange = { note = current.copy(title = it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.titleLarge,
+                    placeholder = { Text("عنوان") }
+                )
+            }
 
-            OutlinedTextField(
-                value = current.title,
-                onValueChange = { note = current.copy(title = it) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                textStyle = MaterialTheme.typography.titleLarge,
-                placeholder = { Text("عنوان") }
-            )
+            items(blocks, key = { it.id }) { block ->
+                BlockEditor(
+                    block = block,
+                    viewModel = viewModel
+                )
+            }
 
-            Spacer(Modifier.height(12.dp))
+            item {
+                OutlinedTextField(
+                    value = current.tags,
+                    onValueChange = { note = current.copy(tags = it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("برچسب‌ها، با ویرگول جدا کن") }
+                )
 
-            OutlinedTextField(
-                value = current.content,
-                onValueChange = { note = current.copy(content = it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                placeholder = { Text("اینجا بنویس…") },
-                minLines = 12
-            )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TextButton(onClick = { viewModel.addTextBlock(noteId) }) {
+                        Text("+ متن")
+                    }
+                    TextButton(onClick = { viewModel.addChecklistBlock(noteId) }) {
+                        Text("+ چک‌لیست")
+                    }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = onClose) {
+                        Text("بستن")
+                    }
+                }
+                Spacer(Modifier.height(20.dp))
+            }
+        }
+    }
+}
 
-            Spacer(Modifier.height(12.dp))
+@Composable
+private fun BlockEditor(
+    block: NoteBlockEntity,
+    viewModel: NoteViewModel
+) {
+    var value by remember(block.id, block.content) { mutableStateOf(block.content) }
+    var checked by remember(block.id, block.checked) { mutableStateOf(block.checked) }
+    var expanded by remember(block.id) { mutableStateOf(true) }
 
-            OutlinedTextField(
-                value = current.tags,
-                onValueChange = { note = current.copy(tags = it) },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("برچسب‌ها، با ویرگول جدا کن") }
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                TextButton(onClick = onClose) {
-                    Text("ذخیره و بستن")
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    if (block.type == BlockType.CHECKLIST.name) "چک‌لیست" else "متن",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Default.Close else Icons.Default.Edit,
+                        "نمایش"
+                    )
+                }
+                IconButton(onClick = { viewModel.deleteBlock(block) }) {
+                    Icon(Icons.Default.Delete, "حذف بلوک")
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
+            if (expanded) {
+                if (block.type == BlockType.CHECKLIST.name) {
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        androidx.compose.material3.Checkbox(
+                            checked = checked,
+                            onCheckedChange = {
+                                checked = it
+                                viewModel.updateBlock(block.copy(checked = it))
+                            }
+                        )
+                        OutlinedTextField(
+                            value = value,
+                            onValueChange = {
+                                value = it
+                                viewModel.updateBlock(block.copy(content = it))
+                            },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text("یک کار بنویس…") }
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = {
+                            value = it
+                            viewModel.updateBlock(block.copy(content = it))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        placeholder = { Text("اینجا بنویس…") }
+                    )
+                }
+            }
         }
     }
 }
