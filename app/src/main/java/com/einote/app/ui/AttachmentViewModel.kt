@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.einote.app.data.AttachmentDao
 import com.einote.app.data.AttachmentEntity
 import com.einote.app.data.NoteDatabase
+import com.einote.app.data.BlockType
+import com.einote.app.data.NoteBlockEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +18,9 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 class AttachmentViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao: AttachmentDao = NoteDatabase.get(application).attachmentDao()
+    private val database = NoteDatabase.get(application)
+    private val dao: AttachmentDao = database.attachmentDao()
+    private val blockDao = database.noteBlockDao()
     private val app = application
     private var recorder: MediaRecorder? = null
     private var recordingNoteId: Long? = null
@@ -103,13 +107,21 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                 activeRecorder.release()
                 if (file != null && noteId != null && file.exists() && file.length() > 0) {
                     viewModelScope.launch {
-                        dao.insert(
+                        val attachmentId = dao.insert(
                             AttachmentEntity(
                                 noteId = noteId,
                                 fileName = "یادداشت صوتی ${System.currentTimeMillis()}.m4a",
                                 mimeType = "audio/mp4",
                                 sizeBytes = file.length(),
                                 localPath = file.absolutePath
+                            )
+                        )
+                        blockDao.insert(
+                            NoteBlockEntity(
+                                noteId = noteId,
+                                type = BlockType.AUDIO.name,
+                                content = attachmentId.toString(),
+                                position = blockDao.nextPosition(noteId)
                             )
                         )
                     }
