@@ -100,7 +100,8 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     val themeMode by settingsViewModel.themeMode.collectAsState()
     val accent by settingsViewModel.accent.collectAsState()
     val textScale by settingsViewModel.textScale.collectAsState()
-    val editorMode by settingsViewModel.editorMode.collectAsState()\n    val dashboardDensity by settingsViewModel.dashboardDensity.collectAsState()
+    val editorMode by settingsViewModel.editorMode.collectAsState()
+    val dashboardDensity by settingsViewModel.dashboardDensity.collectAsState()
 
     var editingId by remember { mutableStateOf<Long?>(null) }
     var plannerOpen by remember { mutableStateOf(false) }
@@ -180,7 +181,8 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
                 onFinance = { financeOpen = true },
                 onBackup = { backupOpen = true },
                 onSecurity = { securityOpen = true },
-                onSettings = { settingsOpen = true },\n                dashboardDensity = dashboardDensity
+                onSettings = { settingsOpen = true },
+                dashboardDensity = dashboardDensity
             )
         }
     }
@@ -291,7 +293,7 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(dashboardSpacing)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             item {
                 Spacer(Modifier.height(10.dp))
@@ -511,6 +513,7 @@ private fun HomeScreen(
     viewModel: NoteViewModel, onCreate: () -> Unit, onOpen: (Long) -> Unit,
     onPlanner: () -> Unit, onFinance: () -> Unit, onBackup: () -> Unit,
     onSecurity: () -> Unit, onSettings: () -> Unit,
+    dashboardDensity: String = SettingsManager.DASHBOARD_BALANCED,
     settingsViewModel: SettingsViewModel = viewModel()
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
@@ -530,7 +533,12 @@ private fun HomeScreen(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var searchOpen by remember { mutableStateOf(false) }
     var filtersOpen by remember { mutableStateOf(false) }
-    var moreOpen by remember { mutableStateOf(false) }\n    val dashboardSpacing = when (dashboardDensity) {\n        SettingsManager.DASHBOARD_AIRY -> 18.dp\n        SettingsManager.DASHBOARD_COMPACT -> 8.dp\n        else -> 12.dp\n    }
+    var moreOpen by remember { mutableStateOf(false) }
+    val dashboardSpacing = when (dashboardDensity) {
+        SettingsManager.DASHBOARD_AIRY -> 18.dp
+        SettingsManager.DASHBOARD_COMPACT -> 8.dp
+        else -> 12.dp
+    }
 
     LaunchedEffect(Unit) { viewModel.setSpace("WRITING") }
 
@@ -818,7 +826,7 @@ private fun FinanceEmptyState(onOpen: () -> Unit) {
 private fun PlannerHero(total: Int, completed: Int) {
     val progress = if (total == 0) 0f else completed.toFloat() / total
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(dashboardSpacing)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
                     Text("برنامه امروز", style = MaterialTheme.typography.labelLarge)
