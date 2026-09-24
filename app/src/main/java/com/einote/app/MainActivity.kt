@@ -40,6 +40,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -547,38 +553,67 @@ private fun HomeScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("eiNote", fontWeight = FontWeight.Bold)
-                        Text(
-                            when (tab) { 1 -> "حساب‌کتاب شخصی"; 2 -> "برنامه‌ریزی شخصی"; else -> "دفتر شخصی" },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    if (isPhone) IconButton(onClick = { moreOpen = true }) { Icon(Icons.Default.Menu, "منوی بیشتر") }
-                },
-                actions = {
-                    if (tab == 0) {
-                        IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
-                        IconButton(onClick = { filtersOpen = true }) { Icon(Icons.Default.FilterList, "فیلترها") }
-                    }
-                    if (!isPhone) {
-                        IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
-                        IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
-                        IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "تنظیمات") }
-                    } else {
-                        DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                            DropdownMenuItem(text = { Text("پشتیبان") }, leadingIcon = { Icon(Icons.Default.SettingsBackupRestore, null) }, onClick = { moreOpen = false; onBackup() })
-                            DropdownMenuItem(text = { Text("امنیت") }, leadingIcon = { Icon(Icons.Default.Lock, null) }, onClick = { moreOpen = false; onSecurity() })
-                            DropdownMenuItem(text = { Text("تنظیمات") }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = { moreOpen = false; onSettings() })
+            AnimatedContent(
+                targetState = searchOpen && tab == 0,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "home_top_bar"
+            ) { searching ->
+                if (searching) {
+                    TopAppBar(
+                        title = {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = viewModel::setSearchQuery,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                placeholder = { Text("جستجوی یادداشت…") },
+                                leadingIcon = { Icon(Icons.Default.Search, null) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        viewModel.setSearchQuery("")
+                                        searchOpen = false
+                                    }) { Icon(Icons.Default.Close, "بستن جستجو") }
+                                },
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                        },
+                        navigationIcon = {}
+                    )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text("eiNote", fontWeight = FontWeight.Bold)
+                                Text(
+                                    when (tab) { 1 -> "حساب‌کتاب شخصی"; 2 -> "برنامه‌ریزی شخصی"; else -> "دفتر شخصی" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            if (isPhone) IconButton(onClick = { moreOpen = true }) { Icon(Icons.Default.Menu, "منوی بیشتر") }
+                        },
+                        actions = {
+                            if (tab == 0) {
+                                IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
+                                IconButton(onClick = { filtersOpen = true }) { Icon(Icons.Default.FilterList, "فیلترها") }
+                            }
+                            if (!isPhone) {
+                                IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
+                                IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
+                                IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "تنظیمات") }
+                            } else {
+                                DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                                    DropdownMenuItem(text = { Text("پشتیبان") }, leadingIcon = { Icon(Icons.Default.SettingsBackupRestore, null) }, onClick = { moreOpen = false; onBackup() })
+                                    DropdownMenuItem(text = { Text("امنیت") }, leadingIcon = { Icon(Icons.Default.Lock, null) }, onClick = { moreOpen = false; onSecurity() })
+                                    DropdownMenuItem(text = { Text("تنظیمات") }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = { moreOpen = false; onSettings() })
+                                }
+                            }
                         }
-                    }
+                    )
                 }
-            )
+            }
         },
         floatingActionButton = {
             when (tab) {
@@ -648,10 +683,6 @@ private fun HomeScreen(
         }
     }
 
-    if (searchOpen && tab == 0) {
-        // جستجو در همان صفحه؛ نوار بالا با حالت مینیمال جایگزین می‌شود.
-        LaunchedEffect(Unit) { }
-    }
     if (filtersOpen) {
         NoteFiltersDialog(
             pinnedOnly = pinnedOnly, archivedOnly = archivedOnly, selectedTag = selectedTag,
@@ -673,26 +704,38 @@ private fun EiNoteSectionTabs(selected: Int, onSelected: (Int) -> Unit) {
     Surface(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f)
     ) {
         Row(Modifier.fillMaxWidth().padding(5.dp)) {
             items.forEachIndexed { index, item ->
                 val active = selected == index
+                val elevation by animateDpAsState(if (active) 3.dp else 0.dp, label = "tab_elevation")
+                val iconScale by animateFloatAsState(if (active) 1.08f else 1f, label = "tab_icon_scale")
                 Surface(
                     onClick = { onSelected(index) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(18.dp),
                     color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
-                    tonalElevation = if (active) 2.dp else 0.dp
+                    tonalElevation = elevation
                 ) {
                     Row(
                         Modifier.padding(vertical = 11.dp, horizontal = 4.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
-                        Icon(item.second, null, Modifier.size(19.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            item.second,
+                            null,
+                            Modifier.size(19.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
+                            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Spacer(Modifier.width(5.dp))
-                        Text(item.first, maxLines = 1, style = MaterialTheme.typography.labelLarge, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+                        Text(
+                            item.first,
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
                 }
             }
