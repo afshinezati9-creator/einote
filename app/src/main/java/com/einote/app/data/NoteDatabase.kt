@@ -8,13 +8,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [NoteEntity::class, NoteBlockEntity::class],
-    version = 3,
+    entities = [NoteEntity::class, NoteBlockEntity::class, FinanceTransactionEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class NoteDatabase : RoomDatabase() {
     abstract fun noteDao(): NoteDao
     abstract fun noteBlockDao(): NoteBlockDao
+    abstract fun financeTransactionDao(): FinanceTransactionDao
 
     companion object {
         @Volatile private var INSTANCE: NoteDatabase? = null
@@ -28,15 +29,28 @@ abstract class NoteDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS finance_transactions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        title TEXT NOT NULL,
+                        amountToman INTEGER NOT NULL,
+                        type TEXT NOT NULL,
+                        category TEXT NOT NULL,
+                        transactionAt INTEGER NOT NULL,
+                        note TEXT NOT NULL,
+                        createdAt INTEGER NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
+
         fun get(context: Context): NoteDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    NoteDatabase::class.java,
-                    "einote.db"
-                )
-                    .addMigrations(MIGRATION_2_3)
-                    .build()
+                    context.applicationContext, NoteDatabase::class.java, "einote.db"
+                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4).build()
                     .also { INSTANCE = it }
             }
     }
