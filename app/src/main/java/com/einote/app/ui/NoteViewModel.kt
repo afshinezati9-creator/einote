@@ -28,10 +28,13 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     private val workManager = WorkManager.getInstance(application)
 
     private val query = MutableStateFlow("")
+    private val space = MutableStateFlow("WRITING")
+    val selectedSpace: StateFlow<String> = space.asStateFlow()
     val searchQuery: StateFlow<String> = query.asStateFlow()
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val notes = query.flatMapLatest(repository::observeNotes)
+    val notes = kotlinx.coroutines.flow.combine(query, space) { q, s -> q to s }
+        .flatMapLatest { (q, s) -> repository.observeNotes(q, s) }
 
     private val pinnedOnly = MutableStateFlow(false)
     val pinnedOnlyFilter: StateFlow<Boolean> = pinnedOnly.asStateFlow()
@@ -43,6 +46,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     val sortFilter: StateFlow<String> = sort.asStateFlow()
 
     fun setSearchQuery(value: String) { query.value = normalize(value) }
+    fun setSpace(value: String) { space.value = value }
     fun setPinnedOnly(value: Boolean) { pinnedOnly.value = value }
     fun setArchivedOnly(value: Boolean) { archivedOnly.value = value }
     fun setSelectedTag(value: String?) { selectedTag.value = value?.trim()?.takeIf { it.isNotBlank() } }
@@ -65,7 +69,7 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun createNote(onCreated: (Long) -> Unit) {
         viewModelScope.launch {
-            val id = repository.insert(NoteEntity())
+            val id = repository.insert(NoteEntity(space = space.value))
             repository.addBlock(id, BlockType.TEXT)
             onCreated(id)
         }
@@ -138,6 +142,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
 
     fun togglePin(note: NoteEntity) = viewModelScope.launch {
         repository.setPinned(note.id, !note.isPinned)
+    }
+
+    fun setNoteColor(note: NoteEntity, color: String) = viewModelScope.launch {
+        repository.update(note.copy(color = color, updatedAt = System.currentTimeMillis()))
     }
 
     fun archive(note: NoteEntity, onDone: () -> Unit = {}) = viewModelScope.launch {
