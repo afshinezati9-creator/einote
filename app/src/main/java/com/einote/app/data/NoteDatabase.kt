@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.withTransaction
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
@@ -19,7 +18,7 @@ abstract class NoteDatabase : RoomDatabase() {
     abstract fun financeTransactionDao(): FinanceTransactionDao
     abstract fun attachmentDao(): AttachmentDao
 
-    suspend fun clearAllData() = withTransaction {
+    suspend fun clearAllData() {
         attachmentDao().deleteAll()
         noteBlockDao().deleteAll()
         financeTransactionDao().deleteAll()
