@@ -1,37 +1,116 @@
-# eiNote — Development Roadmap
+# eiNote — نقشه راه
 
-## Phase 0 — Repository and foundation
-Repository hygiene, product definition, architecture, CI baseline, security policy, Android skeleton, debug/release build validation.
+نسخه فعلی محصول: **0.4.0**
 
-## Phase 1 — Core shell
-Compose theme, navigation, home, settings, empty states, typography/icon system, accessibility baseline.
+## وضعیت کلی
 
-## Phase 2 — Notes
-Create/edit/delete, autosave, pin/archive, tags, search, checklist blocks, important notes.
+| فاز | موضوع | وضعیت |
+|---|---|---|
+| 0 | پایه پروژه و مستندات | ✅ انجام شد |
+| 1 | معماری و زیرساخت اپ | ✅ انجام شد |
+| 2 | پوسته Android + Compose | ✅ انجام شد |
+| 3 | یادداشت آفلاین + Room + جستجو | ✅ انجام شد |
+| 4 | Block + Checklist | ✅ انجام شد |
+| 5 | برنامه‌ریزی + یادآوری | ✅ انجام شد |
+| 6 | دخل‌وخرج + فارسی‌سازی پایه | ✅ انجام شد |
+| 7 | پیوست فایل/عکس آفلاین | 🟡 در حال تکمیل |
+| 8 | رسانه پیشرفته: عکس، پیش‌نمایش، صوت | ⬜ |
+| 9 | پشتیبان‌گیری و بازیابی | ⬜ |
+| 10 | امنیت و قفل برنامه | ⬜ |
+| 11 | شخصی‌سازی و تنظیمات | ⬜ |
+| 12 | جستجوی پیشرفته، برچسب و فیلتر | ⬜ |
+| 13 | تست، بهینه‌سازی و رفع باگ | ⬜ |
+| 14 | نسخه Release، امضا و انتشار APK | ⬜ |
+| 15 | امکانات اختیاری آنلاین/همگام‌سازی | ⬜ |
 
-## Phase 3 — Planner
-Tasks, due dates, reminders, daily/weekly views, recurring tasks and completion states.
+## چک‌لیست اجرایی
 
-## Phase 4 — Personal finance
-Income/expense, categories, accounts/wallets, transaction history, totals, simple reports and Persian-friendly number/date formatting.
+### فاز 7 — پیوست آفلاین
+- [x] مدل Attachment در Room
+- [x] جدول attachments و migration از نسخه 4 به 5
+- [x] ذخیره فایل داخل حافظه خصوصی اپ
+- [x] اتصال پیوست به یادداشت
+- [x] انتخاب فایل از Android Storage Access Framework
+- [x] نمایش نام و حجم فایل با اعداد فارسی
+- [x] حذف پیوست و فایل محلی
+- [ ] تست کامل CI و دستگاه واقعی
+- [ ] پیش‌نمایش تصویری اختصاصی
 
-## Phase 5 — Media notes
-Voice recording/playback, photo/file attachments, previews and storage cleanup.
+### فاز 8 — رسانه
+- [ ] Photo Picker
+- [ ] پیش‌نمایش عکس داخل یادداشت
+- [ ] چندعکس برای هر یادداشت
+- [ ] ضبط و پخش Voice Note
+- [ ] مدیریت مجوزهای لازم
+- [ ] مدیریت حجم رسانه
+- [ ] حذف امن رسانه
 
-## Phase 6 — Backup and restore
-Local backup, encrypted backup, import/export, validation, restore preview and automatic backup options.
+### فاز 9 — Backup / Restore
+- [ ] فرمت نسخه‌دار Backup
+- [ ] خروجی کامل یادداشت‌ها، Blockها، مالی و پیوست‌ها
+- [ ] Import/Restore
+- [ ] اعتبارسنجی Backup
+- [ ] جلوگیری از خراب شدن داده فعلی
+- [ ] رمزگذاری اختیاری Backup
 
-## Phase 7 — Security hardening
-App lock, PIN/biometric, Keystore-backed encryption, log redaction, permission audit, backup encryption and error handling.
+### فاز 10 — امنیت
+- [ ] PIN
+- [ ] Biometric
+- [ ] Android Keystore
+- [ ] قفل خودکار
+- [ ] محافظت از Backup حساس
+- [ ] حذف لاگ‌های حساس
 
-## Phase 8 — Customization
-Themes, accent color, typography scale, density, home modules and default behaviors.
+### فاز 11 — شخصی‌سازی
+- [ ] تم روشن/تیره
+- [ ] رنگ تأکیدی
+- [ ] اندازه متن
+- [ ] تنظیمات صفحه اصلی
+- [ ] تنظیمات اعلان
+- [ ] فونت فارسی Bundled
+- [ ] همه UI با RTL و فارسی
 
-## Phase 9 — Quality
-Performance profiling, migration tests, backup round-trip tests, UI tests, accessibility, crash handling and offline stress testing.
+### فاز 12 — جستجو و سازمان‌دهی
+- [ ] جستجوی عنوان/متن/برچسب
+- [ ] فیلتر
+- [ ] مرتب‌سازی
+- [ ] برچسب‌های قابل مدیریت
+- [ ] یادداشت‌های مهم
+- [ ] بایگانی
+- [ ] جستجوی metadata پیوست‌ها
 
-## Phase 10 — Release
-Release signing outside Git, GitHub Actions, APK artifacts, versioning, release notes and final security review.
+### فاز 13 — کیفیت
+- [ ] تست Room و migration
+- [ ] تست ViewModel
+- [ ] تست تاریخ شمسی
+- [ ] تست تبدیل اعداد فارسی/لاتین
+- [ ] تست Backup round-trip
+- [ ] تست Compose UI
+- [ ] تست روی Android 8 تا نسخه‌های جدید
+- [ ] بررسی RAM و Storage
+- [ ] رفع باگ‌های UI/RTL
 
-## Phase 11 — Optional future capabilities
-Only after the offline core is mature: optional cloud backup, cross-device sync, encrypted synchronization and sharing/collaboration.
+### فاز 14 — Release
+- [ ] versioning نهایی
+- [ ] Release build
+- [ ] Keystore خارج از Git
+- [ ] GitHub Actions برای Release
+- [ ] APK/AAB
+- [ ] changelog
+- [ ] تست نصب و ارتقا
+- [ ] آماده انتشار
+
+### فاز 15 — اختیاری
+- [ ] همگام‌سازی
+- [ ] چنددستگاهی
+- [ ] ورود کاربر
+- [ ] فضای ابری
+- [ ] اشتراک‌گذاری انتخابی
+- [ ] قابلیت‌های AI در صورت نیاز
+
+## وضعیت فعلی
+
+هسته دفتر ساخته شده: یادداشت، Block، چک‌لیست، برنامه‌ریزی، یادآوری و دخل‌وخرج آفلاین هستند. اکنون در حال تکمیل تجربه پیوست و سپس رسانه، Backup و امنیت هستیم.
+
+اصل محصول:
+**آفلاین‌اول + فارسی‌اول + ساده + سریع + قابل توسعه**
