@@ -7,6 +7,16 @@ plugins {
 android {
     namespace="com.einote.app"
     compileSdk=35
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlin {
+        jvmToolchain(17)
+    }
+
     defaultConfig {
         applicationId="com.einote.app"
         minSdk=26
