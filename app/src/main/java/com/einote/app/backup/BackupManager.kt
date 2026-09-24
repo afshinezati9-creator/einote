@@ -41,6 +41,50 @@ class BackupManager(private val context: Context) {
     private val db = NoteDatabase.get(context)
 
     suspend fun exportTo(uri: Uri) {
+        context.contentResolver.openOutputStream(uri)?.use { output ->
+            writeBackupZip(output)
+        } ?: throw BackupException("محل ذخیره پشتیبان قابل دسترسی نیست.")
+    }
+
+    suspend fun exportEncryptedTo(uri: Uri, password: CharArray) {
+        val temp = File(context.cacheDir, "einote-plain-" + System.currentTimeMillis() + ".einote")
+        val encrypted = File(context.cacheDir, "einote-encrypted-" + System.currentTimeMillis() + ".bin")
+        try {
+            java.io.FileOutputStream(temp).use { writeBackupZip(it) }
+            BackupCrypto.encrypt(temp, encrypted, password)
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                FileInputStream(encrypted).use { input -> input.copyTo(output) }
+            } ?: throw BackupException("محل ذخیره پشتیبان قابل دسترسی نیست.")
+        } catch (e: IllegalArgumentException) {
+            throw BackupException(e.message ?: "رمز پشتیبان معتبر نیست.")
+        } catch (e: SecurityException) {
+            throw BackupException(e.message ?: "رمزگذاری پشتیبان انجام نشد.")
+        } finally {
+            temp.delete()
+            encrypted.delete()
+        }
+    }
+
+    suspend fun importEncryptedFrom(uri: Uri, password: CharArray) {
+        val encrypted = File(context.cacheDir, "einote-import-encrypted-" + System.currentTimeMillis() + ".bin")
+        val plain = File(context.cacheDir, "einote-import-plain-" + System.currentTimeMillis() + ".einote")
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(encrypted).use { output -> input.copyTo(output) }
+            } ?: throw BackupException("فایل پشتیبان قابل خواندن نیست.")
+            try {
+                BackupCrypto.decrypt(encrypted, plain, password)
+            } catch (e: SecurityException) {
+                throw BackupException(e.message ?: "رمز پشتیبان اشتباه است.")
+            }
+            importFrom(android.net.Uri.fromFile(plain))
+        } finally {
+            encrypted.delete()
+            plain.delete()
+        }
+    }
+
+    private suspend fun writeBackupZip(output: java.io.OutputStream) {
         val notes = db.noteDao().getAll()
         val blocks = db.noteBlockDao().getAll()
         val finance = db.financeTransactionDao().getAll()
@@ -52,22 +96,20 @@ class BackupManager(private val context: Context) {
             }
         }
 
-        context.contentResolver.openOutputStream(uri)?.use { output ->
-            ZipOutputStream(BufferedOutputStream(output)).use { zip ->
-                putText(zip, MANIFEST, manifestJson(notes.size, blocks.size, finance.size, attachments.size))
-                putText(zip, NOTES, notesJson(notes))
-                putText(zip, BLOCKS, blocksJson(blocks))
-                putText(zip, FINANCE, financeJson(finance))
-                putText(zip, ATTACHMENTS, attachmentsJson(attachments))
+        ZipOutputStream(BufferedOutputStream(output)).use { zip ->
+            putText(zip, MANIFEST, manifestJson(notes.size, blocks.size, finance.size, attachments.size))
+            putText(zip, NOTES, notesJson(notes))
+            putText(zip, BLOCKS, blocksJson(blocks))
+            putText(zip, FINANCE, financeJson(finance))
+            putText(zip, ATTACHMENTS, attachmentsJson(attachments))
 
-                attachments.forEach { attachment ->
-                    val file = File(attachment.localPath)
-                    zip.putNextEntry(ZipEntry(FILES_DIR + attachment.id + ".bin"))
-                    FileInputStream(file).use { input -> input.copyTo(zip) }
-                    zip.closeEntry()
-                }
+            attachments.forEach { attachment ->
+                val file = File(attachment.localPath)
+                zip.putNextEntry(ZipEntry(FILES_DIR + attachment.id + ".bin"))
+                FileInputStream(file).use { input -> input.copyTo(zip) }
+                zip.closeEntry()
             }
-        } ?: throw BackupException("محل ذخیره پشتیبان قابل دسترسی نیست.")
+        }
     }
 
     suspend fun inspect(uri: Uri): BackupInfo {
