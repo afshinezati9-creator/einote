@@ -36,7 +36,10 @@ class SecurityManager(context: Context) {
         prefs.edit().putString(KEY_VERIFIER, encrypt(payload)).apply()
     }
 
-    fun verifyPin(pin: String): Boolean {\n        val now = System.currentTimeMillis()\n        val lockoutUntil = prefs.getLong(KEY_LOCKOUT_UNTIL, 0L)\n        if (lockoutUntil > now) return false
+    fun verifyPin(pin: String): Boolean {
+        val now = System.currentTimeMillis()
+        val lockoutUntil = prefs.getLong(KEY_LOCKOUT_UNTIL, 0L)
+        if (lockoutUntil > now) return false
         val stored = prefs.getString(KEY_VERIFIER, null) ?: return false
         return runCatching {
             val decoded = Base64.decode(decrypt(stored), Base64.NO_WRAP)
@@ -92,6 +95,8 @@ class SecurityManager(context: Context) {
     companion object {
         private const val KEY_ENABLED = "lock_enabled"
         private const val KEY_VERIFIER = "pin_verifier"
-        private const val KEY_AUTO_LOCK_MINUTES = "auto_lock_minutes"\n        private const val KEY_FAILED_ATTEMPTS = "failed_attempts"\n        private const val KEY_LOCKOUT_UNTIL = "lockout_until"
+        private const val KEY_AUTO_LOCK_MINUTES = "auto_lock_minutes"
+        private const val KEY_FAILED_ATTEMPTS = "failed_attempts"
+        private const val KEY_LOCKOUT_UNTIL = "lockout_until"
     }
 }
