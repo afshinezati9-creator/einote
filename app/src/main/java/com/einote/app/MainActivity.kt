@@ -491,20 +491,25 @@ private fun HomeScreen(
     settingsViewModel: SettingsViewModel = viewModel()
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
+    val financeViewModel: FinanceViewModel = viewModel()
+    val transactions by financeViewModel.transactions.collectAsState(initial = emptyList())
+    val income by financeViewModel.income.collectAsState(initial = 0L)
+    val expense by financeViewModel.expense.collectAsState(initial = 0L)
+    val plannedBlocks by viewModel.observePlannedBlocks().collectAsState(initial = emptyList())
     val query by viewModel.searchQuery.collectAsState()
     val pinnedFirst by settingsViewModel.pinnedFirst.collectAsState()
     val showArchived by settingsViewModel.showArchived.collectAsState()
     val pinnedOnly by viewModel.pinnedOnlyFilter.collectAsState()
     val archivedOnly by viewModel.archivedOnlyFilter.collectAsState()
     val selectedTag by viewModel.selectedTagFilter.collectAsState()
-    val selectedSpace by viewModel.selectedSpace.collectAsState()
     val sort by viewModel.sortFilter.collectAsState()
-    val screenWidth = LocalConfiguration.current.screenWidthDp
-    val isPhone = screenWidth < 600
-    val isTablet = screenWidth in 600..839
+    val isPhone = LocalConfiguration.current.screenWidthDp < 600
+    var tab by rememberSaveable { mutableIntStateOf(0) }
     var searchOpen by remember { mutableStateOf(false) }
     var filtersOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { viewModel.setSpace("WRITING") }
 
     val allTags = remember(notes) {
         notes.flatMap { it.tags.split(',', '،').map { tag -> tag.trim() }.filter { it.isNotBlank() } }
@@ -515,146 +520,323 @@ private fun HomeScreen(
             .filter { !pinnedOnly || it.isPinned }
             .filter { !archivedOnly || it.isArchived }
             .filter { selectedTag == null || it.tags.split(',', '،').any { t -> t.trim().replace('ي','ی').replace('ك','ک') == selectedTag } }
-            .let { list -> when(sort) {
-                NoteViewModel.SORT_CREATED -> list.sortedByDescending { it.createdAt }
-                NoteViewModel.SORT_TITLE -> list.sortedBy { it.title.trim().ifBlank { "یادداشت بدون عنوان" } }
-                else -> if(pinnedFirst) list.sortedWith(compareByDescending<NoteEntity>{it.isPinned}.thenByDescending{it.updatedAt}) else list.sortedByDescending{it.updatedAt}
-            }}
+            .let { list ->
+                when (sort) {
+                    NoteViewModel.SORT_CREATED -> list.sortedByDescending { it.createdAt }
+                    NoteViewModel.SORT_TITLE -> list.sortedBy { it.title.trim().ifBlank { "یادداشت بدون عنوان" } }
+                    else -> if (pinnedFirst) list.sortedWith(compareByDescending<NoteEntity>{ it.isPinned }.thenByDescending { it.updatedAt })
+                    else list.sortedByDescending { it.updatedAt }
+                }
+            }
     }
-    val activeFilters = listOf(pinnedOnly, archivedOnly, selectedTag != null, sort != NoteViewModel.SORT_UPDATED).count { it }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            if (searchOpen) TopAppBar(
-                title = { OutlinedTextField(query, viewModel::setSearchQuery, Modifier.fillMaxWidth(), singleLine=true, placeholder={Text("جستجو در عنوان، متن، برچسب، کار و پیوست…")}) },
-                navigationIcon = { IconButton(onClick={searchOpen=false;viewModel.setSearchQuery("")}){Icon(Icons.Default.ArrowBack,"بازگشت")} },
-                actions = { IconButton(onClick={filtersOpen=true}){Icon(Icons.Default.FilterList,"فیلترها")} }
-            ) else CenterAlignedTopAppBar(
+            TopAppBar(
                 title = {
-                    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
-                        Text("eiNote", fontWeight = FontWeight.SemiBold)
-                        if (!isPhone) {
-                            Text(
-                                "دفترچه شخصی",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                    Column {
+                        Text("eiNote", fontWeight = FontWeight.Bold)
+                        Text(
+                            when (tab) { 1 -> "حساب‌کتاب شخصی"; 2 -> "برنامه‌ریزی شخصی"; else -> "دفتر شخصی" },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 },
                 navigationIcon = {
-                    if (isPhone) {
-                        IconButton(onClick = { moreOpen = true }) {
-                            Icon(Icons.Default.Menu, "منوی بیشتر")
-                        }
-                    }
+                    if (isPhone) IconButton(onClick = { moreOpen = true }) { Icon(Icons.Default.Menu, "منوی بیشتر") }
                 },
                 actions = {
-                    IconButton(onClick = { searchOpen = true }) {
-                        Icon(Icons.Default.Search, "جستجو")
-                    }
-                    IconButton(onClick = { filtersOpen = true }) {
-                        Icon(Icons.Default.FilterList, "فیلترها")
+                    if (tab == 0) {
+                        IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
+                        IconButton(onClick = { filtersOpen = true }) { Icon(Icons.Default.FilterList, "فیلترها") }
                     }
                     if (!isPhone) {
-                        IconButton(onClick = onPlanner) {
-                            Icon(Icons.Default.CalendarMonth, "برنامه")
-                        }
-                        IconButton(onClick = onFinance) {
-                            Icon(Icons.Default.AccountBalanceWallet, "مالی")
-                        }
+                        IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
+                        IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
+                        IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "تنظیمات") }
                     } else {
-                        Box {
-                            IconButton(onClick = { moreOpen = true }) {
-                                Icon(Icons.Default.MoreVert, "بیشتر")
-                            }
-                            DropdownMenu(
-                                expanded = moreOpen,
-                                onDismissRequest = { moreOpen = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("برنامه‌ریزی") },
-                                    leadingIcon = { Icon(Icons.Default.CalendarMonth, null) },
-                                    onClick = { moreOpen = false; onPlanner() }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("حساب‌کتاب") },
-                                    leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, null) },
-                                    onClick = { moreOpen = false; onFinance() }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("پشتیبان") },
-                                    leadingIcon = { Icon(Icons.Default.SettingsBackupRestore, null) },
-                                    onClick = { moreOpen = false; onBackup() }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("امنیت") },
-                                    leadingIcon = { Icon(Icons.Default.Lock, null) },
-                                    onClick = { moreOpen = false; onSecurity() }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("تنظیمات") },
-                                    leadingIcon = { Icon(Icons.Default.Settings, null) },
-                                    onClick = { moreOpen = false; onSettings() }
-                                )
-                            }
-                        }
-                    }
-                    if (!isPhone) {
-                        IconButton(onClick = onBackup) {
-                            Icon(Icons.Default.SettingsBackupRestore, "پشتیبان")
-                        }
-                        IconButton(onClick = onSecurity) {
-                            Icon(Icons.Default.Lock, "امنیت")
-                        }
-                        IconButton(onClick = onSettings) {
-                            Icon(Icons.Default.Settings, "تنظیمات")
+                        DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                            DropdownMenuItem(text = { Text("پشتیبان") }, leadingIcon = { Icon(Icons.Default.SettingsBackupRestore, null) }, onClick = { moreOpen = false; onBackup() })
+                            DropdownMenuItem(text = { Text("امنیت") }, leadingIcon = { Icon(Icons.Default.Lock, null) }, onClick = { moreOpen = false; onSecurity() })
+                            DropdownMenuItem(text = { Text("تنظیمات") }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = { moreOpen = false; onSettings() })
                         }
                     }
                 }
             )
         },
-        floatingActionButton={FloatingActionButton(onClick=onCreate){Icon(Icons.Default.Edit,"یادداشت جدید")}}
-    ){padding->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = if (isPhone) 14.dp else if (isTablet) 24.dp else 20.dp)){
-            Spacer(Modifier.height(18.dp)); Text("دفتر من",style=MaterialTheme.typography.headlineMedium)
-            Text(when {query.isNotBlank()->"نتیجه‌های جستجو";activeFilters>0->"یادداشت‌های فیلترشده";else->"هر چیزی که می‌خواهی، همین‌جا."})
-            if(selectedTag!=null){Spacer(Modifier.height(8.dp));AssistChip(onClick={viewModel.setSelectedTag(null)},label={Text("#$selectedTag")},trailingIcon={Icon(Icons.Default.Close,"حذف")})}
-            Spacer(Modifier.height(10.dp))
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    "WRITING" to "نوشتن",
-                    "PLANNING" to "برنامه‌ریزی",
-                    "FINANCE" to "حساب‌کتاب"
-                ).forEach { (value, label) ->
-                    FilterChip(
-                        selected = selectedSpace == value,
-                        onClick = { viewModel.setSpace(value) },
-                        label = { Text(label) },
-                        leadingIcon = {
-                            Icon(
-                                when (value) {
-                                    "PLANNING" -> Icons.Default.CalendarMonth
-                                    "FINANCE" -> Icons.Default.AccountBalanceWallet
-                                    else -> Icons.Default.Edit
-                                },
-                                null
-                            )
+        floatingActionButton = {
+            when (tab) {
+                0 -> FloatingActionButton(onClick = { viewModel.setSpace("WRITING"); onCreate() }) { Icon(Icons.Default.Edit, "یادداشت جدید") }
+                1 -> FloatingActionButton(onClick = onFinance) { Icon(Icons.Default.Add, "تراکنش جدید") }
+                else -> FloatingActionButton(onClick = onPlanner) { Icon(Icons.Default.AddTask, "کار جدید") }
+            }
+        }
+    ) { padding ->
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = if (isPhone) 18.dp else 28.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    when (tab) { 1 -> "حساب‌کتاب من"; 2 -> "برنامه من"; else -> "دفتر من" },
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    when (tab) {
+                        1 -> "پول‌هایت را ساده و روشن دنبال کن."
+                        2 -> "کارها و برنامه‌های روزت را یک‌جا ببین."
+                        else -> "هر چیزی که می‌خواهی، همین‌جا بنویس."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            item { EiNoteSectionTabs(tab) { tab = it } }
+
+            when (tab) {
+                0 -> {
+                    if (selectedTag != null) item {
+                        AssistChip(onClick = { viewModel.setSelectedTag(null) }, label = { Text("#$selectedTag") }, trailingIcon = { Icon(Icons.Default.Close, "حذف") })
+                    }
+                    if (visibleNotes.isEmpty()) {
+                        item { NotesEmptyState { viewModel.setSpace("WRITING"); onCreate() } }
+                    } else {
+                        item { Text("یادداشت‌های اخیر", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                        items(visibleNotes.take(12), key = { it.id }) { note ->
+                            NoteRow(note, { onOpen(note.id) }, { viewModel.togglePin(note) }, { viewModel.archive(note) }, { viewModel.setSelectedTag(it) })
                         }
-                    )
+                    }
+                }
+                1 -> {
+                    item { FinanceHero(income, expense, income - expense) }
+                    item { Text("آخرین تراکنش‌ها", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                    if (transactions.isEmpty()) item { FinanceEmptyState(onFinance) }
+                    else {
+                        items(transactions.take(5), key = { it.id }) { FinanceDashboardRow(it) }
+                        item { TextButton(onClick = onFinance, modifier = Modifier.fillMaxWidth()) { Text("مشاهده همه و ثبت تراکنش"); Spacer(Modifier.width(6.dp)); Icon(Icons.Default.ArrowBack, null) } }
+                    }
+                }
+                else -> {
+                    item { PlannerHero(plannedBlocks.size, plannedBlocks.count { it.checked }) }
+                    item { Text("کارهای پیش‌رو", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
+                    if (plannedBlocks.isEmpty()) item { PlannerEmptyState(onPlanner) }
+                    else {
+                        items(plannedBlocks.take(6), key = { it.id }) { block -> PlannerDashboardRow(block, viewModel) }
+                        item { TextButton(onClick = onPlanner, modifier = Modifier.fillMaxWidth()) { Text("مشاهده برنامه کامل و مدیریت کارها"); Spacer(Modifier.width(6.dp)); Icon(Icons.Default.ArrowBack, null) } }
+                    }
                 }
             }
-            Spacer(Modifier.height(14.dp))
-            if(visibleNotes.isEmpty()) Text(when {query.isNotBlank()->"چیزی پیدا نشد.";activeFilters>0->"یادداشتی با این فیلترها پیدا نشد.";else->"هنوز یادداشتی نداری."})
-            else LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(10.dp)){items(visibleNotes,key={it.id}){note->
-                NoteCard(note,{onOpen(note.id)},{viewModel.togglePin(note)},{viewModel.archive(note)},{viewModel.setSelectedTag(it)})
-            }}
+            item { Spacer(Modifier.height(55.dp)) }
         }
     }
-    if(filtersOpen) NoteFiltersDialog(pinnedOnly,archivedOnly,selectedTag,sort,allTags,viewModel::setPinnedOnly,viewModel::setArchivedOnly,viewModel::setSelectedTag,viewModel::setSort,viewModel::clearFilters,{filtersOpen=false})
+
+    if (searchOpen && tab == 0) {
+        // جستجو در همان صفحه؛ نوار بالا با حالت مینیمال جایگزین می‌شود.
+        LaunchedEffect(Unit) { }
+    }
+    if (filtersOpen) {
+        NoteFiltersDialog(
+            pinnedOnly = pinnedOnly, archivedOnly = archivedOnly, selectedTag = selectedTag,
+            sort = sort, tags = allTags,
+            onPinnedOnly = viewModel::setPinnedOnly, onArchivedOnly = viewModel::setArchivedOnly,
+            onTag = viewModel::setSelectedTag, onSort = viewModel::setSort,
+            onClear = viewModel::clearFilters, onDismiss = { filtersOpen = false }
+        )
+    }
+}
+
+@Composable
+private fun EiNoteSectionTabs(selected: Int, onSelected: (Int) -> Unit) {
+    val items = listOf(
+        "یادداشت من" to Icons.Default.EditNote,
+        "حساب‌کتاب" to Icons.Default.AccountBalanceWallet,
+        "برنامه‌ریزی" to Icons.Default.CalendarMonth
+    )
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(5.dp)) {
+            items.forEachIndexed { index, item ->
+                val active = selected == index
+                Surface(
+                    onClick = { onSelected(index) },
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(18.dp),
+                    color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
+                    tonalElevation = if (active) 2.dp else 0.dp
+                ) {
+                    Row(
+                        Modifier.padding(vertical = 11.dp, horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        Icon(item.second, null, Modifier.size(19.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.width(5.dp))
+                        Text(item.first, maxLines = 1, style = MaterialTheme.typography.labelLarge, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotesEmptyState(onCreate: () -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        Surface(Modifier.size(96.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+            Box(contentAlignment = androidx.compose.ui.Alignment.Center) {
+                Icon(Icons.Default.AutoStories, null, Modifier.size(44.dp), tint = MaterialTheme.colorScheme.primary)
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Text("دفترت هنوز سفیده", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(6.dp))
+        Text("هر چیزی که توی ذهنت هست، از یک جمله شروع می‌شود.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(18.dp))
+        Button(onClick = onCreate, shape = RoundedCornerShape(16.dp)) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(7.dp)); Text("شروع یک یادداشت") }
+    }
+}
+
+@Composable
+private fun FinanceHero(income: Long, expense: Long, balance: Long) {
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("مانده", style = MaterialTheme.typography.labelLarge)
+                    Text(PersianFormat.toman(balance), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                }
+                Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)) {
+                    Icon(Icons.Default.AccountBalanceWallet, null, Modifier.padding(12.dp), tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FinanceMiniMetric("درآمد", income, true, Modifier.weight(1f))
+                FinanceMiniMetric("هزینه", expense, false, Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun FinanceMiniMetric(label: String, amount: Long, positive: Boolean, modifier: Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)) {
+        Column(Modifier.padding(12.dp)) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(PersianFormat.toman(amount), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = if (positive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+        }
+    }
+}
+
+@Composable
+private fun FinanceDashboardRow(transaction: FinanceTransactionEntity) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Icon(if (transaction.type == FinanceTransactionEntity.TYPE_INCOME) Icons.Default.TrendingUp else Icons.Default.TrendingDown, null, Modifier.padding(9.dp), tint = if (transaction.type == FinanceTransactionEntity.TYPE_INCOME) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(transaction.title.ifBlank { transaction.category }, fontWeight = FontWeight.SemiBold)
+            Text(transaction.category + " • " + PersianFormat.jalaliDate(transaction.transactionAt), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text((if (transaction.type == FinanceTransactionEntity.TYPE_INCOME) "+" else "−") + PersianFormat.toman(transaction.amountToman), fontWeight = FontWeight.Bold, color = if (transaction.type == FinanceTransactionEntity.TYPE_INCOME) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+    }
+}
+
+@Composable
+private fun FinanceEmptyState(onOpen: () -> Unit) {
+    SimpleSectionEmptyState(Icons.Default.AccountBalanceWallet, "حساب‌کتابت هنوز شروع نشده", "اولین درآمد یا هزینه‌ات را ثبت کن.", "ثبت تراکنش", onOpen)
+}
+
+@Composable
+private fun PlannerHero(total: Int, completed: Int) {
+    val progress = if (total == 0) 0f else completed.toFloat() / total
+    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("برنامه امروز", style = MaterialTheme.typography.labelLarge)
+                    Text(PersianFormat.digits(completed) + " از " + PersianFormat.digits(total) + " کار انجام شده", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                Surface(shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)) {
+                    Icon(Icons.Default.CalendarMonth, null, Modifier.padding(12.dp), tint = MaterialTheme.colorScheme.secondary)
+                }
+            }
+            LinearProgressIndicator(progress = { progress }, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun PlannerDashboardRow(block: NoteBlockEntity, viewModel: NoteViewModel) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Checkbox(checked = block.checked, onCheckedChange = {
+            viewModel.updateBlock(block.copy(checked = it, completedAt = if (it) System.currentTimeMillis() else null))
+            if (it) viewModel.cancelReminder(block.id)
+        })
+        Column(Modifier.weight(1f)) {
+            Text(block.content.ifBlank { "کار بدون عنوان" }, fontWeight = FontWeight.SemiBold)
+            block.dueAt?.let { Text("موعد: " + PersianFormat.jalaliDateTime(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
+        }
+    }
+}
+
+@Composable
+private fun PlannerEmptyState(onOpen: () -> Unit) {
+    SimpleSectionEmptyState(Icons.Default.CalendarMonth, "برنامه‌ات هنوز خالی است", "یک کار کوچک اضافه کن و از همین امروز شروع کن.", "رفتن به برنامه", onOpen)
+}
+
+@Composable
+private fun SimpleSectionEmptyState(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, description: String, action: String, onAction: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 34.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        Surface(Modifier.size(72.dp), shape = androidx.compose.foundation.shape.CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
+            Box(contentAlignment = androidx.compose.ui.Alignment.Center) { Icon(icon, null, Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary) }
+        }
+        Spacer(Modifier.height(14.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = onAction) { Text(action) }
+    }
+}
+
+@Composable
+private fun NoteRow(note: NoteEntity, onOpen: () -> Unit, onPin: () -> Unit, onArchive: () -> Unit, onTagClick: (String) -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.Top) {
+        Surface(Modifier.size(46.dp), shape = RoundedCornerShape(14.dp), color = MaterialTheme.colorScheme.primaryContainer) {
+            Box(contentAlignment = androidx.compose.ui.Alignment.Center) { Icon(if (note.isPinned) Icons.Default.PushPin else Icons.Default.Notes, null, tint = MaterialTheme.colorScheme.primary) }
+        }
+        Spacer(Modifier.width(13.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(note.title.ifBlank { "یادداشت بدون عنوان" }, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.weight(1f))
+                if (note.isPinned) Icon(Icons.Default.PushPin, null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Box {
+                    IconButton(onClick = { menu = true }, modifier = Modifier.size(32.dp)) { Icon(Icons.Default.MoreVert, "بیشتر", Modifier.size(19.dp)) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text(if (note.isPinned) "برداشتن سنجاق" else "مهم کردن") }, onClick = { menu = false; onPin() })
+                        DropdownMenuItem(text = { Text(if (note.isArchived) "از بایگانی خارج کن" else "بایگانی") }, onClick = { menu = false; onArchive() })
+                    }
+                }
+            }
+            Text(if (note.content.isNotBlank()) note.content.take(150) else "یادداشت خالی", maxLines = 2, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val tags = note.tags.split(',', '،').map { it.trim() }.filter { it.isNotBlank() }.take(4)
+            if (tags.isNotEmpty()) {
+                Spacer(Modifier.height(5.dp))
+                Text(tags.joinToString("  ") { "#$it" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+            }
+        }
+    }
+    HorizontalDivider(Modifier.padding(start = 59.dp))
 }
 
 @Composable
@@ -956,7 +1138,7 @@ private fun NoteEditor(
     val current = note!!
     val focusMode = editorMode == SettingsManager.EDITOR_FOCUS
     val compactMode = editorMode == SettingsManager.EDITOR_COMPACT
-    LaunchedEffect(current.title, current.tags, current.space, current.color) {
+    LaunchedEffect(current.title, current.tags) {
         hasSaved = false
         saving = true
         delay(450)
@@ -1117,11 +1299,6 @@ private fun NoteEditor(
                     shape = RoundedCornerShape(18.dp)
                 )
                 if (!focusMode) {
-                    NoteSpaceAndColorRow(
-                        current = current,
-                        onSpace = { value -> note = current.copy(space = value) },
-                        onColor = { value -> note = current.copy(color = value) }
-                    )
                     OutlinedTextField(
                         value = current.tags,
                         onValueChange = { note = current.copy(tags = it) },
