@@ -18,6 +18,7 @@ import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -489,6 +490,16 @@ class BackupManager(private val context: Context) {
 
     data class Manifest(
         val formatVersion: Int,
+        val schemaVersion: Int,
+        val notesCount: Int,
+        val blocksCount: Int,
+        val financeCount: Int,
+        val attachmentsCount: Int,
+        val createdAt: Long
+    )
+
+    data class BackupInfo(
+        val createdAt: Long,
         val schemaVersion: Int,
         val notesCount: Int,
         val blocksCount: Int,
