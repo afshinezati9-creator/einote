@@ -27,6 +27,7 @@ import com.einote.app.data.NoteBlockEntity
 import com.einote.app.data.NoteEntity
 import com.einote.app.ui.NoteViewModel
 import com.einote.app.ui.FinanceViewModel
+import com.einote.app.ui.AttachmentViewModel
 import com.einote.app.data.FinanceTransactionEntity
 import com.einote.app.util.PersianFormat
 import kotlinx.coroutines.delay
@@ -78,7 +79,8 @@ private fun HomeScreen(
     viewModel: NoteViewModel,
     onCreate: () -> Unit,
     onOpen: (Long) -> Unit,
-    onPlanner: () -> Unit
+    onPlanner: () -> Unit,
+    onFinance: () -> Unit
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
     val query by viewModel.searchQuery.collectAsState()
@@ -256,6 +258,11 @@ private fun NoteEditor(
     var loaded by remember(noteId) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val blocks by viewModel.observeBlocks(noteId).collectAsState(initial = emptyList())
+    val attachmentViewModel: AttachmentViewModel = viewModel()
+    val attachments by attachmentViewModel.observe(noteId).collectAsState(initial = emptyList())
+    val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { attachmentViewModel.addFromUri(noteId, it) }
+    }
 
     LaunchedEffect(noteId) {
         viewModel.getNote(noteId) { note = it; loaded = true }
@@ -335,12 +342,45 @@ private fun NoteEditor(
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(onClick = { viewModel.addTextBlock(noteId) }) { Text("+ متن") }
                     TextButton(onClick = { viewModel.addChecklistBlock(noteId) }) { Text("+ چک‌لیست") }
+                    TextButton(onClick = { attachmentPicker.launch(arrayOf("*/*")) }) {
+                        Icon(Icons.Default.AttachFile, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("پیوست")
+                    }
                     Spacer(Modifier.weight(1f))
                     TextButton(onClick = onClose) { Text("بستن") }
+                }
+
+                if (attachments.isNotEmpty()) {
+                    Text("پیوست‌ها", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    attachments.forEach { attachment ->
+                        AttachmentCard(attachment.fileName, attachment.sizeBytes) { attachmentViewModel.delete(attachment) }
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AttachmentCard(fileName: String, sizeBytes: Long, onDelete: () -> Unit) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp)) {
+            Icon(Icons.Default.AttachFile, contentDescription = null)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(fileName, maxLines = 2)
+                Text(formatFileSize(sizeBytes), style = MaterialTheme.typography.labelSmall)
+            }
+            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف پیوست") }
+        }
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    if (bytes < 1024) return PersianFormat.digits(bytes) + " بایت"
+    if (bytes < 1024 * 1024) return PersianFormat.digits(bytes / 1024) + " کیلوبایت"
+    return PersianFormat.digits(bytes / (1024 * 1024)) + " مگابایت"
 }
 
 @Composable
