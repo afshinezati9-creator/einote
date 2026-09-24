@@ -316,7 +316,8 @@ class BackupManager(private val context: Context) {
             it.getInt("notesCount"),
             it.getInt("blocksCount"),
             it.getInt("financeCount"),
-            it.getInt("attachmentsCount")
+            it.getInt("attachmentsCount"),
+            it.optLong("createdAt", 0L)
         )
     }
 
