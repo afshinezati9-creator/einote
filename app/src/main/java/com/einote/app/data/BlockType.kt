@@ -4,5 +4,6 @@ enum class BlockType {
     TEXT,
     CHECKLIST,
     BULLET,
-    AUDIO
+    AUDIO,
+    IMAGE
 }
