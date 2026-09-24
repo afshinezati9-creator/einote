@@ -27,14 +27,20 @@ class NoteRepository(
     suspend fun setArchived(id: Long, archived: Boolean) = dao.setArchived(id, archived, System.currentTimeMillis())
 
     suspend fun addBlock(noteId: Long, type: BlockType, content: String = ""): Long =
-        blockDao.insert(
+        addBlockAt(noteId, type, blockDao.nextPosition(noteId), content)
+
+    suspend fun addBlockAt(noteId: Long, type: BlockType, position: Int, content: String = ""): Long {
+        val safePosition = position.coerceIn(0, blockDao.nextPosition(noteId))
+        blockDao.shiftPositions(noteId, safePosition, System.currentTimeMillis())
+        return blockDao.insert(
             NoteBlockEntity(
                 noteId = noteId,
                 type = type.name,
                 content = content,
-                position = blockDao.nextPosition(noteId)
+                position = safePosition
             )
         )
+    }
 
     suspend fun updateBlock(block: NoteBlockEntity) {
         blockDao.update(block.copy(updatedAt = System.currentTimeMillis()))
