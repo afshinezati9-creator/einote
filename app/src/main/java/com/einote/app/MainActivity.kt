@@ -2,6 +2,7 @@ package com.einote.app
 
 import android.Manifest
 import android.app.TimePickerDialog
+import android.app.Activity
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -70,14 +74,175 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
             plannerOpen -> PlannerScreen(viewModel, onBack = { plannerOpen = false })
             financeOpen -> FinanceScreen(financeViewModel, onBack = { financeOpen = false })
             backupOpen -> BackupScreen(backupViewModel, onBack = { backupOpen = false })
+            securityOpen -> SecurityScreen(securityViewModel, onBack = { securityOpen = false })
+            locked -> LockScreen(
+                viewModel = securityViewModel,
+                onUnlocked = { locked = false },
+                onBiometric = {
+                    val activity = context as? Activity
+                    if (activity != null) showBiometric(activity) { locked = false }
+                }
+            )
             else -> HomeScreen(
                 viewModel = viewModel,
                 onCreate = { viewModel.createNote { editingId = it } },
                 onOpen = { editingId = it },
                 onPlanner = { plannerOpen = true },
                 onFinance = { financeOpen = true },
-                onBackup = { backupOpen = true }
+                onBackup = { backupOpen = true },
+                onSecurity = { securityOpen = true }
             )
+        }
+    }
+}
+
+
+
+private fun showBiometric(activity: Activity, onSuccess: () -> Unit) {
+    val manager = BiometricManager.from(activity)
+    val authenticators = androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
+        androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
+    if (manager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) return
+
+    val executor = ContextCompat.getMainExecutor(activity)
+    val prompt = BiometricPrompt(
+        activity,
+        executor,
+        object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                onSuccess()
+            }
+        }
+    )
+    prompt.authenticate(
+        BiometricPrompt.PromptInfo.Builder()
+            .setTitle("باز کردن ای‌نوت")
+            .setSubtitle("برای ادامه، هویتت را تأیید کن.")
+            .setAllowedAuthenticators(authenticators)
+            .build()
+    )
+}
+
+@Composable
+private fun LockScreen(
+    viewModel: SecurityViewModel,
+    onUnlocked: () -> Unit,
+    onBiometric: () -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    val message by viewModel.message.collectAsState()
+    val context = LocalContext.current
+    val canBiometric = remember {
+        val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+        BiometricManager.from(context).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
+    }
+
+    Surface(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().padding(28.dp),
+            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(Icons.Default.Lock, null, Modifier.size(54.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.height(16.dp))
+            Text("ای‌نوت قفل است", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Text("رمز ورودت را وارد کن.")
+            Spacer(Modifier.height(22.dp))
+            OutlinedTextField(
+                value = pin,
+                onValueChange = { if (it.length <= 8 && it.all(Char::isDigit)) pin = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("رمز") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+            )
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { if (viewModel.verify(pin)) { pin = ""; onUnlocked() } },
+                enabled = pin.length >= 4,
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("باز کردن") }
+            if (canBiometric) {
+                TextButton(onClick = onBiometric, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Fingerprint, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("باز کردن با اثر انگشت / قفل دستگاه")
+                }
+            }
+            message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SecurityScreen(viewModel: SecurityViewModel, onBack: () -> Unit) {
+    val enabled by viewModel.enabled.collectAsState()
+    val hasPin by viewModel.hasPin.collectAsState()
+    val minutes by viewModel.autoLockMinutes.collectAsState()
+    val message by viewModel.message.collectAsState()
+    var pin by remember { mutableStateOf("") }
+    var confirm by remember { mutableStateOf("") }
+    var disablePin by remember { mutableStateOf("") }
+    var showSetup by remember { mutableStateOf(!hasPin) }
+
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("امنیت و قفل") },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "بازگشت") } }
+        )
+    }) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("قفل برنامه", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text(if (enabled) "قفل فعال است و پس از مدتی دور بودن از برنامه، ای‌نوت دوباره رمز می‌خواهد." else "با فعال‌کردن قفل، اطلاعات دفتر در برابر دسترسی اتفاقی محافظت می‌شود.")
+                }
+            }
+
+            if (!enabled || !hasPin) {
+                OutlinedTextField(
+                    value = pin, onValueChange = { if (it.length <= 8 && it.all(Char::isDigit)) pin = it },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("رمز جدید") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                )
+                OutlinedTextField(
+                    value = confirm, onValueChange = { if (it.length <= 8 && it.all(Char::isDigit)) confirm = it },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("تکرار رمز") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                )
+                Button(
+                    onClick = { if (viewModel.savePin(pin, confirm)) { pin = ""; confirm = "" } },
+                    enabled = pin.length >= 4 && confirm.length >= 4,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("فعال‌کردن قفل") }
+            } else {
+                Text("قفل فعال است")
+                Text("قفل خودکار بعد از $minutes دقیقه")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(1, 5, 15, 30).forEach { value ->
+                        FilterChip(selected = minutes == value, onClick = { viewModel.setAutoLock(value) }, label = { Text("$value دقیقه") })
+                    }
+                }
+                OutlinedTextField(
+                    value = disablePin, onValueChange = { if (it.length <= 8 && it.all(Char::isDigit)) disablePin = it },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                    label = { Text("رمز برای غیرفعال‌کردن") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+                )
+                OutlinedButton(
+                    onClick = { if (viewModel.disable(disablePin)) disablePin = "" },
+                    enabled = disablePin.length >= 4,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("غیرفعال‌کردن قفل") }
+            }
+            message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
         }
     }
 }
@@ -90,7 +255,8 @@ private fun HomeScreen(
     onOpen: (Long) -> Unit,
     onPlanner: () -> Unit,
     onFinance: () -> Unit,
-    onBackup: () -> Unit
+    onBackup: () -> Unit,
+    onSecurity: () -> Unit
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
     val query by viewModel.searchQuery.collectAsState()
@@ -122,6 +288,7 @@ private fun HomeScreen(
                         IconButton(onClick = onPlanner) { Icon(Icons.Default.CalendarMonth, "برنامه") }
                         IconButton(onClick = onFinance) { Icon(Icons.Default.AccountBalanceWallet, "مالی") }
                         IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
+                        IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
                         IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
                     }
                 )
