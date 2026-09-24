@@ -124,12 +124,14 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                                 localPath = file.absolutePath
                             )
                         )
+                        val targetPosition = insertPosition ?: blockDao.nextPosition(noteId)
+                        blockDao.shiftPositions(noteId, targetPosition, System.currentTimeMillis())
                         blockDao.insert(
                             NoteBlockEntity(
                                 noteId = noteId,
                                 type = BlockType.AUDIO.name,
                                 content = attachmentId.toString(),
-                                position = insertPosition ?: blockDao.nextPosition(noteId)
+                                position = targetPosition
                             )
                         )
                     }
