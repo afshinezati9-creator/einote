@@ -439,88 +439,99 @@ private fun SecurityScreen(viewModel: SecurityViewModel, onBack: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreen(
-    viewModel: NoteViewModel,
-    onCreate: () -> Unit,
-    onOpen: (Long) -> Unit,
-    onPlanner: () -> Unit,
-    onFinance: () -> Unit,
-    onBackup: () -> Unit,
-    onSecurity: () -> Unit,
-    onSettings: () -> Unit,
+    viewModel: NoteViewModel, onCreate: () -> Unit, onOpen: (Long) -> Unit,
+    onPlanner: () -> Unit, onFinance: () -> Unit, onBackup: () -> Unit,
+    onSecurity: () -> Unit, onSettings: () -> Unit,
     settingsViewModel: SettingsViewModel = viewModel()
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
     val query by viewModel.searchQuery.collectAsState()
     val pinnedFirst by settingsViewModel.pinnedFirst.collectAsState()
     val showArchived by settingsViewModel.showArchived.collectAsState()
+    val pinnedOnly by viewModel.pinnedOnlyFilter.collectAsState()
+    val archivedOnly by viewModel.archivedOnlyFilter.collectAsState()
+    val selectedTag by viewModel.selectedTagFilter.collectAsState()
+    val sort by viewModel.sortFilter.collectAsState()
     var searchOpen by remember { mutableStateOf(false) }
-    val visibleNotes = remember(notes, pinnedFirst, showArchived) {
-        notes
-            .filter { showArchived || !it.isArchived }
-            .let { list -> if (pinnedFirst) list.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenByDescending { it.updatedAt }) else list }
+    var filtersOpen by remember { mutableStateOf(false) }
+
+    val allTags = remember(notes) {
+        notes.flatMap { it.tags.split(',', '،').map { tag -> tag.trim() }.filter { it.isNotBlank() } }
+            .distinctBy { it.replace('ي','ی').replace('ك','ک') }.sorted()
     }
+    val visibleNotes = remember(notes, pinnedFirst, showArchived, pinnedOnly, archivedOnly, selectedTag, sort) {
+        notes.filter { showArchived || !it.isArchived }
+            .filter { !pinnedOnly || it.isPinned }
+            .filter { !archivedOnly || it.isArchived }
+            .filter { selectedTag == null || it.tags.split(',', '،').any { t -> t.trim().replace('ي','ی').replace('ك','ک') == selectedTag } }
+            .let { list -> when(sort) {
+                NoteViewModel.SORT_CREATED -> list.sortedByDescending { it.createdAt }
+                NoteViewModel.SORT_TITLE -> list.sortedBy { it.title.trim().ifBlank { "یادداشت بدون عنوان" } }
+                else -> if(pinnedFirst) list.sortedWith(compareByDescending<NoteEntity>{it.isPinned}.thenByDescending{it.updatedAt}) else list.sortedByDescending{it.updatedAt}
+            }}
+    }
+    val activeFilters = listOf(pinnedOnly, archivedOnly, selectedTag != null, sort != NoteViewModel.SORT_UPDATED).count { it }
 
     Scaffold(
         topBar = {
-            if (searchOpen) {
-                TopAppBar(
-                    title = {
-                        OutlinedTextField(
-                            value = query,
-                            onValueChange = viewModel::setSearchQuery,
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            placeholder = { Text("جستجو در دفتر…") }
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = { searchOpen = false; viewModel.setSearchQuery("") }) {
-                            Icon(Icons.Default.ArrowBack, "بازگشت")
-                        }
-                    }
-                )
-            } else {
-                CenterAlignedTopAppBar(
-                    title = { Text("eiNote", fontWeight = FontWeight.SemiBold) },
-                    actions = {
-                        IconButton(onClick = onPlanner) { Icon(Icons.Default.CalendarMonth, "برنامه") }
-                        IconButton(onClick = onFinance) { Icon(Icons.Default.AccountBalanceWallet, "مالی") }
-                        IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
-                        IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
-                        IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "تنظیمات") }
-                        IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
-                    }
-                )
-            }
+            if (searchOpen) TopAppBar(
+                title = { OutlinedTextField(query, viewModel::setSearchQuery, Modifier.fillMaxWidth(), singleLine=true, placeholder={Text("جستجو در عنوان، متن، برچسب، کار و پیوست…")}) },
+                navigationIcon = { IconButton(onClick={searchOpen=false;viewModel.setSearchQuery("")}){Icon(Icons.Default.ArrowBack,"بازگشت")} },
+                actions = { IconButton(onClick={filtersOpen=true}){Icon(Icons.Default.FilterList,"فیلترها")} }
+            ) else CenterAlignedTopAppBar(
+                title={Text("eiNote",fontWeight=FontWeight.SemiBold)},
+                actions={
+                    IconButton(onClick=onPlanner){Icon(Icons.Default.CalendarMonth,"برنامه")}
+                    IconButton(onClick=onFinance){Icon(Icons.Default.AccountBalanceWallet,"مالی")}
+                    IconButton(onClick=onBackup){Icon(Icons.Default.SettingsBackupRestore,"پشتیبان")}
+                    IconButton(onClick=onSecurity){Icon(Icons.Default.Lock,"امنیت")}
+                    IconButton(onClick=onSettings){Icon(Icons.Default.Settings,"تنظیمات")}
+                    IconButton(onClick={filtersOpen::let}){Icon(Icons.Default.FilterList,"فیلترها")}
+                    IconButton(onClick={ { searchOpen=true } }){Icon(Icons.Default.Search,"جستجو")}
+                }
+            )
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onCreate) { Icon(Icons.Default.Edit, "یادداشت جدید") }
+        floatingActionButton={FloatingActionButton(onClick=onCreate){Icon(Icons.Default.Edit,"یادداشت جدید")}}
+    ){padding->
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal=20.dp)){
+            Spacer(Modifier.height(18.dp)); Text("دفتر من",style=MaterialTheme.typography.headlineMedium)
+            Text(when {query.isNotBlank()->"نتیجه‌های جستجو";activeFilters>0->"یادداشت‌های فیلترشده";else->"هر چیزی که می‌خواهی، همین‌جا."})
+            if(selectedTag!=null){Spacer(Modifier.height(8.dp));AssistChip(onClick={viewModel.setSelectedTag(null)},label={Text("#$selectedTag")},trailingIcon={Icon(Icons.Default.Close,"حذف")})}
+            Spacer(Modifier.height(14.dp))
+            if(visibleNotes.isEmpty()) Text(when {query.isNotBlank()->"چیزی پیدا نشد.";activeFilters>0->"یادداشتی با این فیلترها پیدا نشد.";else->"هنوز یادداشتی نداری."})
+            else LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(10.dp)){items(visibleNotes,key={it.id}){note->
+                NoteCard(note,{onOpen(note.id)},{viewModel.togglePin(note)},{viewModel.archive(note)},{viewModel.setSelectedTag(it)})
+            }}
         }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp)) {
-            Spacer(Modifier.height(18.dp))
-            Text("دفتر من", style = MaterialTheme.typography.headlineMedium)
-            Text(if (query.isBlank()) "هر چیزی که می‌خواهی، همین‌جا." else "نتیجه‌های جستجو")
-            Spacer(Modifier.height(18.dp))
-            if (visibleNotes.isEmpty()) {
-                Text(if (query.isBlank()) "هنوز یادداشتی نداری." else "چیزی پیدا نشد.")
-            } else {
-                LazyColumn(
-                    Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(visibleNotes, key = { it.id }) { note ->
-                        NoteCard(
-                            note = note,
-                            onOpen = { onOpen(note.id) },
-                            onPin = { viewModel.togglePin(note) },
-                            onArchive = { viewModel.archive(note) }
-                        )
-                    }
+    }
+    if(filtersOpen) NoteFiltersDialog(pinnedOnly,archivedOnly,selectedTag,sort,allTags,viewModel::setPinnedOnly,viewModel::setArchivedOnly,viewModel::setSelectedTag,viewModel::setSort,viewModel::clearFilters,{filtersOpen=false})
+}
+
+@Composable
+private fun NoteFiltersDialog(
+    pinnedOnly:Boolean, archivedOnly:Boolean, selectedTag:String?, sort:String, tags:List<String>,
+    onPinnedOnly:(Boolean)->Unit, onArchivedOnly:(Boolean)->Unit, onTag:(String?)->Unit, onSort:(String)->Unit,
+    onClear:()->Unit, onDismiss:()->Unit
+){
+    AlertDialog(onDismissRequest=onDismiss,title={Text("جستجو و فیلتر")},text={
+        Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
+            Text("وضعیت",style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
+            SettingSwitchRow("فقط یادداشت‌های مهم",pinnedOnly,onPinnedOnly)
+            SettingSwitchRow("فقط بایگانی‌شده‌ها",archivedOnly,onArchivedOnly)
+            Text("مرتب‌سازی",style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
+            Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){
+                FilterChip(sort==NoteViewModel.SORT_UPDATED,{onSort(NoteViewModel.SORT_UPDATED)},label={Text("آخرین ویرایش")})
+                FilterChip(sort==NoteViewModel.SORT_CREATED,{onSort(NoteViewModel.SORT_CREATED)},label={Text("جدیدترین")})
+                FilterChip(sort==NoteViewModel.SORT_TITLE,{onSort(NoteViewModel.SORT_TITLE)},label={Text("الفبا")})
+            }
+            if(tags.isNotEmpty()){
+                Text("برچسب‌ها",style=MaterialTheme.typography.titleSmall,fontWeight=FontWeight.SemiBold)
+                Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth()){
+                    tags.take(20).forEach{tag->FilterChip(selectedTag==tag,{onTag(if(selectedTag==tag)null else tag)},label={Text("#$tag",maxLines=1)})}
                 }
             }
         }
-    }
+    },confirmButton={TextButton(onClick=onDismiss){Text("اعمال")}},dismissButton={TextButton(onClick={onClear();onDismiss()}){Text("پاک کردن فیلترها")}})
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -627,39 +638,22 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun NoteCard(
-    note: NoteEntity,
-    onOpen: () -> Unit,
-    onPin: () -> Unit,
-    onArchive: () -> Unit
-) {
-    var menu by remember { mutableStateOf(false) }
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), onClick = onOpen) {
-        Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth()) {
-                Text(
-                    text = note.title.ifBlank { "یادداشت بدون عنوان" },
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (note.isPinned) Icon(Icons.Default.PushPin, "سنجاق", tint = MaterialTheme.colorScheme.primary)
-                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "بیشتر") }
-                DropdownMenu(menu, { menu = false }) {
-                    DropdownMenuItem(
-                        text = { Text(if (note.isPinned) "برداشتن سنجاق" else "سنجاق کردن") },
-                        onClick = { menu = false; onPin() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("بایگانی") },
-                        onClick = { menu = false; onArchive() }
-                    )
+private fun NoteCard(note:NoteEntity,onOpen:()->Unit,onPin:()->Unit,onArchive:()->Unit,onTagClick:(String)->Unit){
+    var menu by remember{mutableStateOf(false)}
+    Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(18.dp),onClick=onOpen){
+        Column(Modifier.padding(16.dp)){
+            Row(Modifier.fillMaxWidth()){
+                Text(note.title.ifBlank{"یادداشت بدون عنوان"},Modifier.weight(1f),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
+                if(note.isPinned)Icon(Icons.Default.PushPin,"سنجاق",tint=MaterialTheme.colorScheme.primary)
+                IconButton(onClick={menu=true}){Icon(Icons.Default.MoreVert,"بیشتر")}
+                DropdownMenu(menu,{menu=false}){
+                    DropdownMenuItem(text={Text(if(note.isPinned)"برداشتن سنجاق" else "سنجاق کردن")},onClick={menu=false;onPin()})
+                    DropdownMenuItem(text={Text(if(note.isArchived)"از بایگانی خارج کن" else "بایگانی")},onClick={menu=false;onArchive()})
                 }
             }
-            if (note.content.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Text(note.content.take(180), style = MaterialTheme.typography.bodyMedium)
-            }
+            if(note.content.isNotBlank()){Spacer(Modifier.height(6.dp));Text(note.content.take(180))}
+            val tags=note.tags.split(',', '،').map{it.trim()}.filter{it.isNotBlank()}.take(6)
+            if(tags.isNotEmpty()){Spacer(Modifier.height(8.dp));Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){tags.forEach{tag->AssistChip(onClick={onTagClick(tag.replace('ي','ی').replace('ك','ک'))},label={Text("#$tag")})}}}
         }
     }
 }
