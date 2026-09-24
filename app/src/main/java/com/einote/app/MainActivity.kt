@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -954,6 +955,11 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
     val message by viewModel.message.collectAsState()
     val info by viewModel.info.collectAsState()
     var selectedRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var secureExportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var secureExportDialog by remember { mutableStateOf(false) }
+    var secureImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var securePassword by remember { mutableStateOf("") }
+    var securePasswordConfirm by remember { mutableStateOf("") }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -964,6 +970,22 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
     ) { uri ->
         selectedRestoreUri = uri
         uri?.let { viewModel.inspect(it) }
+    }
+    val secureExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        secureExportUri = uri
+        if (uri != null) {
+            securePassword = ""
+            securePasswordConfirm = ""
+            secureExportDialog = true
+        }
+    }
+    val secureImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        secureImportUri = uri
+        if (uri != null) securePassword = ""
     }
 
     BackHandler { if (!busy) onBack() }
@@ -1027,6 +1049,38 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
                     Icon(Icons.Default.Backup, null)
                     Spacer(Modifier.width(8.dp))
                     Text("ساخت پشتیبان جدید")
+                }
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = {
+                        securePassword = ""
+                        securePasswordConfirm = ""
+                        secureExportLauncher.launch("eiNote-secure-backup.einote.secure")
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Lock, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("ساخت پشتیبان رمزگذاری‌شده")
+                }
+            }
+
+            item {
+                TextButton(
+                    onClick = {
+                        securePassword = ""
+                        secureImportLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.LockOpen, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("بازیابی پشتیبان رمزگذاری‌شده")
                 }
             }
 
@@ -1106,6 +1160,81 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+
+    if (secureExportDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) secureExportDialog = false },
+            title = { Text("رمزگذاری پشتیبان") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("رمز حداقل ۸ کاراکتری انتخاب کن. این رمز در ای‌نوت ذخیره نمی‌شود.")
+                    OutlinedTextField(
+                        value = securePassword,
+                        onValueChange = { securePassword = it },
+                        singleLine = true,
+                        label = { Text("رمز پشتیبان") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                    OutlinedTextField(
+                        value = securePasswordConfirm,
+                        onValueChange = { securePasswordConfirm = it },
+                        singleLine = true,
+                        label = { Text("تکرار رمز") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = securePassword.length >= 8 && securePassword == securePasswordConfirm && secureExportUri != null && !busy,
+                    onClick = {
+                        val uri = secureExportUri
+                        secureExportDialog = false
+                        if (uri != null) viewModel.exportEncrypted(uri, securePassword.toCharArray())
+                        securePassword = ""
+                        securePasswordConfirm = ""
+                    }
+                ) { Text("ساخت") }
+            },
+            dismissButton = {
+                TextButton(onClick = { secureExportDialog = false; secureExportUri = null }) { Text("انصراف") }
+            }
+        )
+    }
+
+    if (secureImportUri != null) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) secureImportUri = null },
+            title = { Text("بازیابی پشتیبان رمزگذاری‌شده") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("رمز همان پشتیبانی را وارد کن. رمز روی دستگاه ذخیره نمی‌شود.")
+                    OutlinedTextField(
+                        value = securePassword,
+                        onValueChange = { securePassword = it },
+                        singleLine = true,
+                        label = { Text("رمز پشتیبان") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = securePassword.length >= 8 && !busy,
+                    onClick = {
+                        val uri = secureImportUri
+                        secureImportUri = null
+                        if (uri != null) viewModel.importEncrypted(uri, securePassword.toCharArray())
+                        securePassword = ""
+                    }
+                ) { Text("بازیابی") }
+            },
+            dismissButton = { TextButton(onClick = { secureImportUri = null }) { Text("انصراف") } }
+        )
     }
 
     if (info != null && selectedRestoreUri != null) {
