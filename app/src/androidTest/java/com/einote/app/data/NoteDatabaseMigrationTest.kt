@@ -1,32 +1,28 @@
 package com.einote.app.data
 
+import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import androidx.room.testing.MigrationTestHelper
+import androidx.room.Room
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.io.IOException
 
 @RunWith(AndroidJUnit4::class)
 class NoteDatabaseMigrationTest {
     private lateinit var context: Context
-    private lateinit var helper: MigrationTestHelper
 
     @Before
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         context.deleteDatabase(DB_NAME)
-        helper = MigrationTestHelper(
-            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation(),
-            NoteDatabase::class.java
-        )
     }
 
     @After
@@ -35,115 +31,124 @@ class NoteDatabaseMigrationTest {
     }
 
     @Test
-    @Throws(IOException::class)
-    fun migrateFromVersion2ToCurrentPreservesDataAndAddsAllTables() {
-        val database = createVersion2Database()
+    fun migrateFromVersion2ToCurrentPreservesDataAndAddsAllTables() = runBlocking {
+        createVersion2DatabaseWithData()
 
-        database.insert(
-            "notes",
-            SQLiteDatabase.CONFLICT_NONE,
-            android.content.ContentValues().apply {
-                put("id", 7L)
-                put("title", "قدیمی")
-                put("content", "محتوای قدیمی")
-                put("tags", "آزمون")
-                put("isPinned", 1)
-                put("isArchived", 0)
-                put("createdAt", 1000L)
-                put("updatedAt", 2000L)
-            }
-        )
-        database.insert(
-            "note_blocks",
-            SQLiteDatabase.CONFLICT_NONE,
-            android.content.ContentValues().apply {
-                put("id", 11L)
-                put("noteId", 7L)
-                put("type", "CHECKLIST")
-                put("content", "کار قدیمی")
-                put("checked", 0)
-                put("position", 0)
-                put("createdAt", 1000L)
-                put("updatedAt", 2000L)
-            }
-        )
-        database.close()
+        val db = openMigratedDatabase()
+        try {
+            val note = db.noteDao().getById(7L)
+            val block = db.noteBlockDao().getById(11L)
 
-        val migrated = helper.runMigrationsAndValidate(
-            DB_NAME,
-            5,
-            true,
-            *NoteDatabase.ALL_MIGRATIONS
-        )
+            assertEquals("قدیمی", note?.title)
+            assertEquals("محتوای قدیمی", note?.content)
+            assertEquals("کار قدیمی", block?.content)
 
-        migrated.query("SELECT title, content FROM notes WHERE id = 7").use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("قدیمی", cursor.getString(0))
-            assertEquals("محتوای قدیمی", cursor.getString(1))
+            val migrated = db.openHelper.writableDatabase
+            assertEquals(5, migrated.version)
+            assertTrue(tableExists(migrated, "finance_transactions"))
+            assertTrue(tableExists(migrated, "attachments"))
+            assertTrue(columnExists(migrated, "note_blocks", "dueAt"))
+            assertTrue(columnExists(migrated, "note_blocks", "reminderAt"))
+            assertTrue(columnExists(migrated, "note_blocks", "completedAt"))
+        } finally {
+            db.close()
         }
-        migrated.query("SELECT content FROM note_blocks WHERE id = 11").use { cursor ->
-            assertTrue(cursor.moveToFirst())
-            assertEquals("کار قدیمی", cursor.getString(0))
-        }
-
-        assertTrue(tableExists(migrated, "finance_transactions"))
-        assertTrue(tableExists(migrated, "attachments"))
-        assertTrue(columnExists(migrated, "note_blocks", "dueAt"))
-        assertTrue(columnExists(migrated, "note_blocks", "reminderAt"))
-        assertTrue(columnExists(migrated, "note_blocks", "completedAt"))
-        migrated.close()
     }
 
     @Test
-    @Throws(IOException::class)
     fun migrateFromVersion2CreatesNullablePlanningFields() {
-        val database = createVersion2Database()
-        database.close()
+        createVersion2DatabaseWithData(insertData = false)
 
-        val migrated = helper.runMigrationsAndValidate(
-            DB_NAME,
-            5,
-            true,
-            *NoteDatabase.ALL_MIGRATIONS
-        )
-
-        assertTrue(columnExists(migrated, "note_blocks", "dueAt"))
-        assertTrue(columnExists(migrated, "note_blocks", "reminderAt"))
-        assertTrue(columnExists(migrated, "note_blocks", "completedAt"))
-        migrated.close()
+        val db = openMigratedDatabase()
+        try {
+            val migrated = db.openHelper.writableDatabase
+            assertTrue(columnExists(migrated, "note_blocks", "dueAt"))
+            assertTrue(columnExists(migrated, "note_blocks", "reminderAt"))
+            assertTrue(columnExists(migrated, "note_blocks", "completedAt"))
+        } finally {
+            db.close()
+        }
     }
 
-    private fun createVersion2Database(): SupportSQLiteDatabase =
-        helper.createDatabase(DB_NAME, 2).apply {
-            execSQL(
-                """
-                CREATE TABLE notes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    tags TEXT NOT NULL,
-                    isPinned INTEGER NOT NULL,
-                    isArchived INTEGER NOT NULL,
-                    createdAt INTEGER NOT NULL,
-                    updatedAt INTEGER NOT NULL
-                )
-                """.trimIndent()
+    private fun openMigratedDatabase(): NoteDatabase =
+        Room.databaseBuilder(
+            context,
+            NoteDatabase::class.java,
+            DB_NAME
+        )
+            .allowMainThreadQueries()
+            .addMigrations(*NoteDatabase.ALL_MIGRATIONS)
+            .build()
+
+    private fun createVersion2DatabaseWithData(insertData: Boolean = true) {
+        val database = SQLiteDatabase.openOrCreateDatabase(
+            context.getDatabasePath(DB_NAME),
+            null
+        )
+
+        database.execSQL(
+            """
+            CREATE TABLE notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                tags TEXT NOT NULL,
+                isPinned INTEGER NOT NULL,
+                isArchived INTEGER NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL
             )
-            execSQL(
-                """
-                CREATE TABLE note_blocks (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    noteId INTEGER NOT NULL,
-                    type TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    checked INTEGER NOT NULL,
-                    position INTEGER NOT NULL,
-                    createdAt INTEGER NOT NULL,
-                    updatedAt INTEGER NOT NULL
-                )
-                """.trimIndent()
+            """.trimIndent()
+        )
+        database.execSQL(
+            """
+            CREATE TABLE note_blocks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                noteId INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                content TEXT NOT NULL,
+                checked INTEGER NOT NULL,
+                position INTEGER NOT NULL,
+                createdAt INTEGER NOT NULL,
+                updatedAt INTEGER NOT NULL
+            )
+            """.trimIndent()
+        )
+
+        if (insertData) {
+            database.insert(
+                "notes",
+                SQLiteDatabase.CONFLICT_NONE,
+                ContentValues().apply {
+                    put("id", 7L)
+                    put("title", "قدیمی")
+                    put("content", "محتوای قدیمی")
+                    put("tags", "آزمون")
+                    put("isPinned", 1)
+                    put("isArchived", 0)
+                    put("createdAt", 1000L)
+                    put("updatedAt", 2000L)
+                }
+            )
+            database.insert(
+                "note_blocks",
+                SQLiteDatabase.CONFLICT_NONE,
+                ContentValues().apply {
+                    put("id", 11L)
+                    put("noteId", 7L)
+                    put("type", "CHECKLIST")
+                    put("content", "کار قدیمی")
+                    put("checked", 0)
+                    put("position", 0)
+                    put("createdAt", 1000L)
+                    put("updatedAt", 2000L)
+                }
             )
         }
+
+        database.version = 2
+        database.close()
+    }
 
     private fun tableExists(database: SupportSQLiteDatabase, name: String): Boolean =
         database.query(
