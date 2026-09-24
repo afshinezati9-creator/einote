@@ -47,11 +47,11 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         manager.exportTo(uri)
     }
 
-    fun import(uri: Uri) = run("بازیابی با موفقیت انجام شد.") {
+    fun exportEncrypted(uri: Uri, password: CharArray) = run("پشتیبان رمزگذاری‌شده با موفقیت ساخته شد.") {\n        try { manager.exportEncryptedTo(uri, password) } finally { password.fill(Char(0)) }\n    }\n\n    fun import(uri: Uri) = run("بازیابی با موفقیت انجام شد.") {
         manager.importFrom(uri)
     }
 
-    private fun run(success: String, action: suspend () -> Unit) {
+    fun importEncrypted(uri: Uri, password: CharArray) = run("بازیابی پشتیبان رمزگذاری‌شده با موفقیت انجام شد.") {\n        try { manager.importEncryptedFrom(uri, password) } finally { password.fill(Char(0)) }\n    }\n\n    private fun run(success: String, action: suspend () -> Unit) {
         if (_busy.value) return
         viewModelScope.launch {
             _busy.value = true
