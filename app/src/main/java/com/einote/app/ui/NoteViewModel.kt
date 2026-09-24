@@ -86,6 +86,10 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     fun addTextBlock(noteId: Long) = viewModelScope.launch { repository.addBlock(noteId, BlockType.TEXT) }
     fun addChecklistBlock(noteId: Long) = viewModelScope.launch { repository.addBlock(noteId, BlockType.CHECKLIST) }
     fun addBulletBlock(noteId: Long) = viewModelScope.launch { repository.addBlock(noteId, BlockType.BULLET) }
+
+    fun addTextBlockAt(noteId: Long, position: Int) = viewModelScope.launch { repository.addBlockAt(noteId, BlockType.TEXT, position) }
+    fun addChecklistBlockAt(noteId: Long, position: Int) = viewModelScope.launch { repository.addBlockAt(noteId, BlockType.CHECKLIST, position) }
+    fun addBulletBlockAt(noteId: Long, position: Int) = viewModelScope.launch { repository.addBlockAt(noteId, BlockType.BULLET, position) }
     fun updateBlock(block: NoteBlockEntity) = viewModelScope.launch {
         repository.updateBlock(block.copy(updatedAt = System.currentTimeMillis()))
         scheduleReminder(block)
