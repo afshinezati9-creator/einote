@@ -9,7 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.*\nimport androidx.compose.ui.unit.sp\nimport androidx.compose.ui.text.font.FontStyle\nimport androidx.compose.ui.input.pointer.pointerInput\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.foundation.graphicsLayer\nimport androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress\nimport androidx.compose.foundation.clickable\nimport androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -721,6 +721,7 @@ private fun PlannedBlockCard(block: NoteBlockEntity, viewModel: NoteViewModel) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NoteEditor(
     noteId: Long,
@@ -731,10 +732,14 @@ private fun NoteEditor(
     var note by remember(noteId) { mutableStateOf<NoteEntity?>(null) }
     var loaded by remember(noteId) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+    var orderedBlocks by remember(noteId) { mutableStateOf<List<NoteBlockEntity>>(emptyList()) }
+    var dragging by remember { mutableStateOf(false) }
+
     val blocks by viewModel.observeBlocks(noteId).collectAsState(initial = emptyList())
     val attachmentViewModel: AttachmentViewModel = viewModel()
     val attachments by attachmentViewModel.observe(noteId).collectAsState(initial = emptyList())
     val isRecording by attachmentViewModel.isRecording.collectAsState()
+
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { attachmentViewModel.addFromUri(noteId, it) }
     }
@@ -748,119 +753,193 @@ private fun NoteEditor(
     LaunchedEffect(noteId) {
         viewModel.getNote(noteId) { note = it; loaded = true }
     }
+    LaunchedEffect(blocks) {
+        if (!dragging) orderedBlocks = blocks
+    }
     BackHandler { onClose() }
 
     if (!loaded || note == null) {
-        Surface(Modifier.fillMaxSize()) {}
+        Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+            CircularProgressIndicator()
+        }
         return
     }
 
     val current = note!!
     LaunchedEffect(current.title, current.tags) {
-        delay(500)
+        delay(450)
         viewModel.saveNote(current)
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(current.title.ifBlank { "یادداشت جدید" }, maxLines = 1) },
-                navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Default.ArrowBack, "بازگشت") } },
+                title = {
+                    Column {
+                        Text(
+                            current.title.ifBlank { "یادداشت جدید" },
+                            maxLines = 1,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            PersianFormat.jalaliDate(current.updatedAt),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.Default.ArrowBack, "بازگشت")
+                    }
+                },
                 actions = {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "ابزارها") }
-                    DropdownMenu(menu, { menu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("متن جدید") },
-                            onClick = { menu = false; viewModel.addTextBlock(noteId) }
+                    IconButton(onClick = { viewModel.togglePin(current); note = current.copy(isPinned = !current.isPinned) }) {
+                        Icon(
+                            if (current.isPinned) Icons.Default.Star else Icons.Default.StarBorder,
+                            "سنجاق"
                         )
-                        DropdownMenuItem(
-                            text = { Text("چک‌لیست جدید") },
-                            onClick = { menu = false; viewModel.addChecklistBlock(noteId) }
-                        )
-                        DropdownMenuItem(
-                            text = { Text(if (current.isPinned) "برداشتن سنجاق" else "سنجاق کردن") },
-                            onClick = {
-                                menu = false
-                                viewModel.togglePin(current)
-                                note = current.copy(isPinned = !current.isPinned)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("حذف یادداشت") },
-                            onClick = { menu = false; viewModel.deleteNote(current) { onClose() } }
-                        )
+                    }
+                    Box {
+                        IconButton(onClick = { menu = true }) {
+                            Icon(Icons.Default.MoreVert, "گزینه‌ها")
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("متن") },
+                                leadingIcon = { Icon(Icons.Default.Notes, null) },
+                                onClick = { menu = false; viewModel.addTextBlock(noteId) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("چک‌لیست") },
+                                leadingIcon = { Icon(Icons.Default.Checklist, null) },
+                                onClick = { menu = false; viewModel.addChecklistBlock(noteId) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("فهرست نقطه‌ای") },
+                                leadingIcon = { Icon(Icons.Default.FormatListBulleted, null) },
+                                onClick = { menu = false; viewModel.addBulletBlock(noteId) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("حذف یادداشت") },
+                                leadingIcon = { Icon(Icons.Default.DeleteOutline, null) },
+                                onClick = { menu = false; viewModel.deleteNote(current) { onClose() } }
+                            )
+                        }
                     }
                 }
             )
+        },
+        bottomBar = {
+            NoteComposerToolbar(
+                isRecording = isRecording,
+                onText = { viewModel.addTextBlock(noteId) },
+                onChecklist = { viewModel.addChecklistBlock(noteId) },
+                onBullet = { viewModel.addBulletBlock(noteId) },
+                onPhoto = {
+                    photoPicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                onFile = { attachmentPicker.launch(arrayOf("*/*")) },
+                onAudio = {
+                    if (isRecording) attachmentViewModel.stopVoiceRecording()
+                    else audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                },
+                onClose = onClose
+            )
         }
     ) { padding ->
-        LazyColumn(
-            Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        Column(
+            Modifier.fillMaxSize().padding(padding)
         ) {
-            item {
-                Spacer(Modifier.height(8.dp))
+            Column(
+                Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                Text(
+                    "یادداشت",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
                 OutlinedTextField(
                     value = current.title,
                     onValueChange = { note = current.copy(title = it) },
-                    Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    textStyle = MaterialTheme.typography.titleLarge,
-                    placeholder = { Text("عنوان") }
+                    textStyle = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    placeholder = { Text("عنوان یادداشت") },
+                    leadingIcon = { Icon(Icons.Default.Title, null) },
+                    shape = RoundedCornerShape(18.dp)
                 )
-            }
-            items(blocks, key = { it.id }) { block ->
-                BlockEditor(block, viewModel, onReminderScheduled)
-            }
-            item {
                 OutlinedTextField(
                     value = current.tags,
                     onValueChange = { note = current.copy(tags = it) },
-                    Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    placeholder = { Text("برچسب‌ها، با ویرگول جدا کن") }
+                    placeholder = { Text("برچسب‌ها را بنویس؛ مثلاً کار، ایده، شخصی") },
+                    leadingIcon = { Icon(Icons.Default.LabelOutline, null) },
+                    shape = RoundedCornerShape(18.dp)
                 )
-                Row(Modifier.fillMaxWidth()) {
-                    TextButton(onClick = { viewModel.addTextBlock(noteId) }) { Text("+ متن") }
-                    TextButton(onClick = { viewModel.addChecklistBlock(noteId) }) { Text("+ چک‌لیست") }
-                    TextButton(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
-                        Icon(Icons.Default.Photo, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("عکس")
-                    }
-                    TextButton(onClick = { attachmentPicker.launch(arrayOf("*/*")) }) {
-                        Icon(Icons.Default.AttachFile, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("فایل")
-                    }
-                    TextButton(onClick = {
-                        if (isRecording) attachmentViewModel.stopVoiceRecording()
-                        else audioPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    }) {
-                        Icon(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text(if (isRecording) "توقف ضبط" else "صدا")
-                    }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = onClose) { Text("بستن") }
-                }
+            }
 
-                if (attachments.isNotEmpty()) {
-                    Text("پیوست‌ها", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    attachments.forEach { attachment ->
-                        when {
-                            attachment.mimeType.startsWith("image/") ->
-                                ImageAttachmentCard(attachment.localPath, attachment.fileName, attachment.sizeBytes) {
-                                    attachmentViewModel.delete(attachment)
+            Surface(
+                Modifier.weight(1f).fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+                tonalElevation = 1.dp
+            ) {
+                if (orderedBlocks.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        Text("از نوار پایین یک بلوک اضافه کن و شروع به نوشتن کن.")
+                    }
+                } else {
+                    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        itemsIndexed(orderedBlocks, key = { _, item -> item.id }) { index, block ->
+                            DraggableBlockEditor(
+                                block = block,
+                                index = index,
+                                allBlocks = orderedBlocks,
+                                viewModel = viewModel,
+                                onReminderScheduled = onReminderScheduled,
+                                onDraggingChanged = { dragging = it },
+                                onOrderChanged = { orderedBlocks = it },
+                                listState = listState
+                            )
+                        }
+
+                        item {
+                            if (attachments.isNotEmpty()) {
+                                Text(
+                                    "پیوست‌ها",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                                )
+                                attachments.forEach { attachment ->
+                                    when {
+                                        attachment.mimeType.startsWith("image/") ->
+                                            ImageAttachmentCard(attachment.localPath, attachment.fileName, attachment.sizeBytes) {
+                                                attachmentViewModel.delete(attachment)
+                                            }
+                                        attachment.mimeType.startsWith("audio/") ->
+                                            AudioAttachmentCard(attachment.localPath, attachment.fileName, attachment.sizeBytes) {
+                                                attachmentViewModel.delete(attachment)
+                                            }
+                                        else ->
+                                            AttachmentCard(attachment.fileName, attachment.sizeBytes) {
+                                                attachmentViewModel.delete(attachment)
+                                            }
+                                    }
+                                    Spacer(Modifier.height(8.dp))
                                 }
-                            attachment.mimeType.startsWith("audio/") ->
-                                AudioAttachmentCard(attachment.localPath, attachment.fileName, attachment.sizeBytes) {
-                                    attachmentViewModel.delete(attachment)
-                                }
-                            else ->
-                                AttachmentCard(attachment.fileName, attachment.sizeBytes) {
-                                    attachmentViewModel.delete(attachment)
-                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
                         }
                     }
                 }
@@ -870,25 +949,336 @@ private fun NoteEditor(
 }
 
 @Composable
+private fun NoteComposerToolbar(
+    isRecording: Boolean,
+    onText: () -> Unit,
+    onChecklist: () -> Unit,
+    onBullet: () -> Unit,
+    onPhoto: () -> Unit,
+    onFile: () -> Unit,
+    onAudio: () -> Unit,
+    onClose: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        tonalElevation = 8.dp,
+        shadowElevation = 8.dp,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 7.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            ComposerTool(Icons.Default.Notes, "متن", onText)
+            ComposerTool(Icons.Default.Checklist, "چک", onChecklist)
+            ComposerTool(Icons.Default.FormatListBulleted, "لیست", onBullet)
+            ComposerTool(Icons.Default.Photo, "عکس", onPhoto)
+            ComposerTool(Icons.Default.AttachFile, "فایل", onFile)
+            ComposerTool(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, if (isRecording) "توقف" else "صدا", onAudio)
+            Spacer(Modifier.weight(1f))
+            IconButton(onClick = onClose) {
+                Icon(Icons.Default.Check, "ذخیره و بستن")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComposerTool(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        IconButton(onClick = onClick, modifier = Modifier.size(42.dp)) {
+            Icon(icon, label)
+        }
+        Text(label, style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+@Composable
+private fun DraggableBlockEditor(
+    block: NoteBlockEntity,
+    index: Int,
+    allBlocks: List<NoteBlockEntity>,
+    viewModel: NoteViewModel,
+    onReminderScheduled: () -> Unit,
+    onDraggingChanged: (Boolean) -> Unit,
+    onOrderChanged: (List<NoteBlockEntity>) -> Unit,
+    listState: androidx.compose.foundation.lazy.LazyListState
+) {
+    var dragOffset by remember(block.id) { mutableFloatStateOf(0f) }
+    val currentIndex = remember { mutableIntStateOf(index) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                translationY = if (dragOffset != 0f) dragOffset else 0f
+                shadowElevation = if (dragOffset != 0f) 18f else 0f
+            },
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(Modifier.fillMaxWidth()) {
+            Box(
+                Modifier
+                    .width(42.dp)
+                    .fillMaxHeight()
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                    .pointerInput(allBlocks, index) {
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = {
+                                currentIndex.intValue = index
+                                dragOffset = 0f
+                                onDraggingChanged(true)
+                            },
+                            onDragCancel = {
+                                dragOffset = 0f
+                                onDraggingChanged(false)
+                            },
+                            onDragEnd = {
+                                dragOffset = 0f
+                                onDraggingChanged(false)
+                                onOrderChanged(allBlocks)
+                                viewModel.persistBlockOrder(allBlocks)
+                            },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                dragOffset += amount.y
+
+                                val visible = listState.layoutInfo.visibleItemsInfo
+                                val current = visible.firstOrNull { it.index == currentIndex.intValue } ?: return@detectDragGesturesAfterLongPress
+                                val center = current.offset + dragOffset + current.size / 2
+                                val target = visible
+                                    .filter { it.index != currentIndex.intValue }
+                                    .firstOrNull { center > it.offset && center < it.offset + it.size }
+
+                                if (target != null) {
+                                    val from = currentIndex.intValue
+                                    val to = target.index
+                                    val mutable = allBlocks.toMutableList()
+                                    val item = mutable.removeAt(from)
+                                    mutable.add(to, item)
+                                    currentIndex.intValue = to
+                                    dragOffset = 0f
+                                    onOrderChanged(mutable)
+                                }
+                            }
+                        )
+                    },
+                contentAlignment = androidx.compose.ui.Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.DragIndicator,
+                    contentDescription = "کشیدن برای جابه‌جایی",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Box(Modifier.weight(1f)) {
+                StyledBlockEditor(block, viewModel, onReminderScheduled)
+            }
+        }
+    }
+}
+
+@Composable
+private fun StyledBlockEditor(
+    block: NoteBlockEntity,
+    viewModel: NoteViewModel,
+    onReminderScheduled: () -> Unit
+) {
+    var value by remember(block.id, block.content) { mutableStateOf(block.content) }
+    var checked by remember(block.id, block.checked) { mutableStateOf(block.checked) }
+    var showTools by remember(block.id) { mutableStateOf(false) }
+    val context = LocalContext.current
+    val textColor = if (block.textColor == 0L) MaterialTheme.colorScheme.onSurface else Color(block.textColor.toULong())
+    val size = block.textSizeSp.coerceIn(13f, 32f)
+
+    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text(
+                when (block.type) {
+                    BlockType.CHECKLIST.name -> "چک‌لیست"
+                    BlockType.BULLET.name -> "فهرست"
+                    else -> "متن"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = { showTools = !showTools }) {
+                Icon(Icons.Default.Tune, "قالب‌بندی")
+            }
+            IconButton(onClick = { viewModel.deleteBlock(block) }) {
+                Icon(Icons.Default.DeleteOutline, "حذف")
+            }
+        }
+
+        if (showTools) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Text("اندازه", style = MaterialTheme.typography.labelMedium)
+                Slider(
+                    value = size,
+                    onValueChange = { viewModel.updateBlock(block.copy(textSizeSp = it)) },
+                    valueRange = 13f..32f,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(PersianFormat.digits(size.toInt().toLong()), style = MaterialTheme.typography.labelSmall)
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(
+                    MaterialTheme.colorScheme.onSurface,
+                    MaterialTheme.colorScheme.primary,
+                    Color(0xFF7C3AED),
+                    Color(0xFFDC2626),
+                    Color(0xFF059669),
+                    Color(0xFFF59E0B)
+                ).forEach { color ->
+                    Box(
+                        Modifier
+                            .size(28.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(color)
+                            .clickable {
+                                viewModel.updateBlock(block.copy(textColor = color.value.toLong()))
+                            }
+                    )
+                }
+            }
+        }
+
+        if (block.type == BlockType.CHECKLIST.name) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = {
+                        checked = it
+                        viewModel.updateBlock(
+                            block.copy(
+                                checked = it,
+                                completedAt = if (it) System.currentTimeMillis() else null
+                            )
+                        )
+                        if (it) viewModel.cancelReminder(block.id)
+                    }
+                )
+                BasicEditorField(
+                    value = value,
+                    onValueChange = {
+                        value = it
+                        viewModel.updateBlock(block.copy(content = it))
+                    },
+                    textColor = textColor,
+                    size = size,
+                    placeholder = "یک کار بنویس…",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        } else {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.Top) {
+                if (block.type == BlockType.BULLET.name) {
+                    Text("•", fontSize = size.sp, color = textColor, modifier = Modifier.padding(top = 8.dp, end = 8.dp))
+                }
+                BasicEditorField(
+                    value = value,
+                    onValueChange = {
+                        value = it
+                        viewModel.updateBlock(block.copy(content = it))
+                    },
+                    textColor = textColor,
+                    size = size,
+                    placeholder = if (block.type == BlockType.BULLET.name) "آیتم فهرست…" else "اینجا بنویس…",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        if (block.type == BlockType.CHECKLIST.name) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(onClick = {
+                    pickJalaliDateTime(context, block.dueAt ?: System.currentTimeMillis()) {
+                        if (it > System.currentTimeMillis()) {
+                            viewModel.updateBlock(block.copy(dueAt = it, reminderAt = it))
+                            onReminderScheduled()
+                        }
+                    }
+                }) {
+                    Icon(Icons.Default.CalendarMonth, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (block.dueAt == null) "یادآوری" else PersianFormat.jalaliDate(block.dueAt))
+                }
+                if (block.dueAt != null) {
+                    TextButton(onClick = {
+                        viewModel.updateBlock(block.copy(dueAt = null, reminderAt = null))
+                        viewModel.cancelReminder(block.id)
+                    }) { Text("پاک کردن") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BasicEditorField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    textColor: Color,
+    size: Float,
+    placeholder: String,
+    modifier: Modifier
+) {
+    androidx.compose.foundation.text.BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 110.dp),
+        textStyle = androidx.compose.ui.text.TextStyle(
+            color = textColor,
+            fontSize = size.sp,
+            lineHeight = (size * 1.55f).sp
+        ),
+        decorationBox = { inner ->
+            if (value.isBlank()) {
+                Text(
+                    placeholder,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    fontSize = size.sp
+                )
+            }
+            inner()
+        }
+    )
+}
+
+@Composable
 private fun ImageAttachmentCard(
     path: String,
     fileName: String,
     sizeBytes: Long,
     onDelete: () -> Unit
 ) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
         Column(Modifier.padding(10.dp)) {
             AsyncImage(
                 model = File(path),
                 contentDescription = fileName,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).clip(RoundedCornerShape(10.dp))
+                modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp).clip(RoundedCornerShape(14.dp))
             )
             Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Column(Modifier.weight(1f)) {
-                    Text(fileName, maxLines = 2)
+                    Text(fileName, maxLines = 2, fontWeight = FontWeight.Medium)
                     Text(formatFileSize(sizeBytes), style = MaterialTheme.typography.labelSmall)
                 }
-                IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف عکس") }
+                IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "حذف عکس") }
             }
         }
     }
@@ -911,12 +1301,12 @@ private fun AudioAttachmentCard(
         }
     }
 
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(12.dp)) {
-            Icon(if (playing) Icons.Default.VolumeUp else Icons.Default.Mic, contentDescription = null)
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(fileName, maxLines = 2)
+                Text(fileName, maxLines = 2, fontWeight = FontWeight.Medium)
                 Text(formatFileSize(sizeBytes), style = MaterialTheme.typography.labelSmall)
             }
             IconButton(onClick = {
@@ -942,26 +1332,24 @@ private fun AudioAttachmentCard(
                     }
                 }
             }) {
-                Icon(if (playing) Icons.Default.Stop else Icons.Default.PlayArrow, contentDescription = "پخش/توقف")
+                Icon(if (playing) Icons.Default.Stop else Icons.Default.PlayArrow, "پخش/توقف")
             }
-            IconButton(onClick = onDelete) {
-                Icon(Icons.Default.Delete, contentDescription = "حذف صدا")
-            }
+            IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "حذف صدا") }
         }
     }
 }
 
 @Composable
 private fun AttachmentCard(fileName: String, sizeBytes: Long, onDelete: () -> Unit) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-        Row(Modifier.fillMaxWidth().padding(12.dp)) {
-            Icon(Icons.Default.AttachFile, contentDescription = null)
+    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Icon(Icons.Default.AttachFile, null)
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(fileName, maxLines = 2)
+                Text(fileName, maxLines = 2, fontWeight = FontWeight.Medium)
                 Text(formatFileSize(sizeBytes), style = MaterialTheme.typography.labelSmall)
             }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "حذف پیوست") }
+            IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "حذف پیوست") }
         }
     }
 }
@@ -970,88 +1358,6 @@ private fun formatFileSize(bytes: Long): String {
     if (bytes < 1024) return PersianFormat.digits(bytes) + " بایت"
     if (bytes < 1024 * 1024) return PersianFormat.digits(bytes / 1024) + " کیلوبایت"
     return PersianFormat.digits(bytes / (1024 * 1024)) + " مگابایت"
-}
-
-@Composable
-private fun BlockEditor(
-    block: NoteBlockEntity,
-    viewModel: NoteViewModel,
-    onReminderScheduled: () -> Unit
-) {
-    var value by remember(block.id, block.content) { mutableStateOf(block.content) }
-    var checked by remember(block.id, block.checked) { mutableStateOf(block.checked) }
-    var expanded by remember(block.id) { mutableStateOf(true) }
-    val context = LocalContext.current
-
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(12.dp)) {
-            Row(Modifier.fillMaxWidth()) {
-                Text(if (block.type == BlockType.CHECKLIST.name) "چک‌لیست" else "متن", Modifier.weight(1f))
-                IconButton(onClick = { expanded = !expanded }) { Icon(Icons.Default.Edit, "باز و بسته") }
-                IconButton(onClick = { viewModel.deleteBlock(block) }) { Icon(Icons.Default.Delete, "حذف") }
-            }
-
-            if (expanded) {
-                if (block.type == BlockType.CHECKLIST.name) {
-                    Row(Modifier.fillMaxWidth()) {
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = {
-                                checked = it
-                                val updated = block.copy(
-                                    checked = it,
-                                    completedAt = if (it) System.currentTimeMillis() else null
-                                )
-                                viewModel.updateBlock(updated)
-                                if (it) viewModel.cancelReminder(block.id)
-                            }
-                        )
-                        OutlinedTextField(
-                            value = value,
-                            onValueChange = {
-                                value = it
-                                viewModel.updateBlock(block.copy(content = it))
-                            },
-                            Modifier.weight(1f),
-                            placeholder = { Text("یک کار بنویس…") }
-                        )
-                    }
-
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = {
-                            pickJalaliDateTime(context, block.dueAt ?: System.currentTimeMillis()) {
-                                if (it > System.currentTimeMillis()) {
-                                    viewModel.updateBlock(block.copy(dueAt = it, reminderAt = it))
-                                    onReminderScheduled()
-                                }
-                            }
-                        }) {
-                            Icon(Icons.Default.CalendarMonth, null)
-                            Spacer(Modifier.width(4.dp))
-                            Text(if (block.dueAt == null) "برنامه‌ریزی" else PersianFormat.jalaliDateTime(block.dueAt))
-                        }
-                        if (block.dueAt != null) {
-                            TextButton(onClick = {
-                                viewModel.updateBlock(block.copy(dueAt = null, reminderAt = null))
-                                viewModel.cancelReminder(block.id)
-                            }) { Text("پاک کردن") }
-                        }
-                    }
-                } else {
-                    OutlinedTextField(
-                        value = value,
-                        onValueChange = {
-                            value = it
-                            viewModel.updateBlock(block.copy(content = it))
-                        },
-                        Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        placeholder = { Text("اینجا بنویس…") }
-                    )
-                }
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
