@@ -19,9 +19,29 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
-    private val _info = MutableStateFlow<BackupManager.BackupInfo?>(null)\n    val info: StateFlow<BackupManager.BackupInfo?> = _info.asStateFlow()
+    private val _info = MutableStateFlow<BackupManager.BackupInfo?>(null)
+    val info: StateFlow<BackupManager.BackupInfo?> = _info.asStateFlow()
 
-    fun inspect(uri: Uri) {\n        if (_busy.value) return\n        viewModelScope.launch {\n            _busy.value = true\n            _message.value = null\n            try {\n                _info.value = manager.inspect(uri)\n            } catch (e: BackupManager.BackupException) {\n                _info.value = null\n                _message.value = e.message ?: "فایل پشتیبان معتبر نیست."\n            } catch (_: Exception) {\n                _info.value = null\n                _message.value = "فایل پشتیبان قابل بررسی نیست."\n            } finally {\n                _busy.value = false\n            }\n        }\n    }\n\n    fun clearInfo() { _info.value = null }
+    fun inspect(uri: Uri) {
+        if (_busy.value) return
+        viewModelScope.launch {
+            _busy.value = true
+            _message.value = null
+            try {
+                _info.value = manager.inspect(uri)
+            } catch (e: BackupManager.BackupException) {
+                _info.value = null
+                _message.value = e.message ?: "فایل پشتیبان معتبر نیست."
+            } catch (_: Exception) {
+                _info.value = null
+                _message.value = "فایل پشتیبان قابل بررسی نیست."
+            } finally {
+                _busy.value = false
+            }
+        }
+    }
+
+    fun clearInfo() { _info.value = null }
 
     fun export(uri: Uri) = run("پشتیبان با موفقیت ساخته شد.") {
         manager.exportTo(uri)
