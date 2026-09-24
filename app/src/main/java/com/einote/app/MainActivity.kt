@@ -952,17 +952,19 @@ private fun NoteFiltersDialog(
 private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
     val busy by viewModel.busy.collectAsState()
     val message by viewModel.message.collectAsState()
+    val info by viewModel.info.collectAsState()
+    var selectedRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri ->
-        uri?.let { viewModel.export(it) }
-    }
+    ) { uri -> uri?.let { viewModel.export(it) } }
+
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { viewModel.import(it) }
+        selectedRestoreUri = uri
+        uri?.let { viewModel.inspect(it) }
     }
-    var confirmRestore by remember { mutableStateOf(false) }
 
     BackHandler { if (!busy) onBack() }
 
@@ -978,76 +980,174 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp),
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("پشتیبان کامل دفتر", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("یادداشت‌ها، چک‌لیست‌ها، برنامه‌ریزی، یادآوری‌ها، دخل‌وخرج و همه عکس‌ها، فایل‌ها و صداها در یک فایل آفلاین ذخیره می‌شوند.")
-                    Text("فرمت پشتیبان نسخه‌دار است و قبل از بازیابی، ساختار و ارتباط داده‌ها بررسی می‌شود.")
+            item {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Icon(
+                                    Icons.Default.CloudDone,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(12.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("دفتر همیشه قابل برگشت است", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("یک نسخه آفلاین از اطلاعاتت بساز.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Text(
+                            "یادداشت‌ها، بلوک‌ها، برنامه‌ریزی، دخل‌وخرج، یادآوری‌ها و فایل‌های پیوست در یک پشتیبان نسخه‌دار ذخیره می‌شوند.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
 
-            Button(
-                onClick = {
-                    val current = PersianFormat.currentJalali()
-                    val date = "${current.first}-${current.second}-${current.third}"
-                    exportLauncher.launch("eiNote-backup-" + date + ".einote")
-                },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Backup, null)
-                Spacer(Modifier.width(8.dp))
-                Text("ساخت پشتیبان")
+            item {
+                Button(
+                    onClick = {
+                        val current = PersianFormat.currentJalali()
+                        val date = current.first.toString() + "-" + current.second + "-" + current.third
+                        exportLauncher.launch("eiNote-backup-" + date + ".einote")
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Backup, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("ساخت پشتیبان جدید")
+                }
             }
 
-            OutlinedButton(
-                onClick = { confirmRestore = true },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Restore, null)
-                Spacer(Modifier.width(8.dp))
-                Text("بازیابی پشتیبان")
+            item {
+                OutlinedButton(
+                    onClick = {
+                        selectedRestoreUri = null
+                        viewModel.clearInfo()
+                        importLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/*"))
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Restore, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("انتخاب پشتیبان برای بازیابی")
+                }
             }
 
             if (busy) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-                Text("در حال انجام عملیات…")
-            }
-
-            message?.let {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-                    Text(it, Modifier.padding(14.dp))
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("در حال بررسی پشتیبان…", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
 
-            Spacer(Modifier.weight(1f))
-            Text(
-                "نکته: بازیابی، دفتر فعلی را با نسخه داخل پشتیبان جایگزین می‌کند. اگر فایل خراب یا ناسازگار باشد، بازیابی متوقف می‌شود.",
-                style = MaterialTheme.typography.bodySmall
-            )
+            info?.let { backup ->
+                item {
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Icon(Icons.Default.Verified, null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("پشتیبان معتبر است", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                            Text(
+                                "ساختار نسخه " + backup.schemaVersion + " با ای‌نوت سازگار است و ساختار فایل قبل از بازیابی بررسی شده.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                BackupStat("یادداشت", backup.notesCount)
+                                BackupStat("بلوک", backup.blocksCount)
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                BackupStat("تراکنش", backup.financeCount)
+                                BackupStat("پیوست", backup.attachmentsCount)
+                            }
+                            Text(
+                                "بازیابی جایگزین کامل است؛ بهتر است قبل از ادامه یک پشتیبان از دفتر فعلی هم داشته باشی.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+
+            message?.let { msg ->
+                item {
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                        Text(msg, Modifier.padding(14.dp))
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "بازیابی به‌صورت تراکنشی انجام می‌شود؛ اگر داده‌ها یا فایل‌های پشتیبان ناسالم باشند، عملیات متوقف می‌شود.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 
-    if (confirmRestore) {
+    if (info != null && selectedRestoreUri != null) {
         AlertDialog(
-            onDismissRequest = { if (!busy) confirmRestore = false },
-            title = { Text("بازیابی پشتیبان؟") },
-            text = { Text("اطلاعات فعلی این دفتر با اطلاعات موجود در پشتیبان جایگزین می‌شود. قبل از ادامه مطمئن شو که پشتیبان درست را انتخاب می‌کنی.") },
+            onDismissRequest = { if (!busy) { selectedRestoreUri = null; viewModel.clearInfo() } },
+            title = { Text("بازیابی این پشتیبان؟") },
+            text = {
+                Text(
+                    "این عملیات اطلاعات فعلی دفتر را با " + info!!.notesCount + " یادداشت، " +
+                        info!!.blocksCount + " بلوک و " + info!!.financeCount + " تراکنش جایگزین می‌کند. برای ادامه تأیید کن."
+                )
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    confirmRestore = false
-                    importLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/*"))
-                }) { Text("ادامه") }
+                TextButton(
+                    onClick = {
+                        val uri = selectedRestoreUri
+                        selectedRestoreUri = null
+                        viewModel.clearInfo()
+                        if (uri != null) viewModel.import(uri)
+                    }
+                ) { Text("بازیابی") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRestore = false }) { Text("انصراف") }
+                TextButton(onClick = { selectedRestoreUri = null; viewModel.clearInfo() }) {
+                    Text("انصراف")
+                }
             }
         )
+    }
+}
+
+@Composable
+private fun BackupStat(label: String, value: Int) {
+    Surface(
+        Modifier.weight(1f),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(value.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
