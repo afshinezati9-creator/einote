@@ -1036,6 +1036,8 @@ private fun NoteEditor(
                                 block = block,
                                 index = index,
                                 allBlocks = orderedBlocks,
+                                attachments = attachments,
+                                attachmentViewModel = attachmentViewModel,
                                 viewModel = viewModel,
                                 onReminderScheduled = onReminderScheduled,
                                 onDraggingChanged = { dragging = it },
@@ -1045,14 +1047,21 @@ private fun NoteEditor(
                         }
 
                         item {
-                            if (attachments.isNotEmpty()) {
+                            val audioBlockAttachmentIds = orderedBlocks
+                                .filter { it.type == BlockType.AUDIO.name }
+                                .mapNotNull { it.content.toLongOrNull() }
+                                .toSet()
+                            val visibleAttachments = attachments.filterNot {
+                                it.mimeType.startsWith("audio/") && it.id in audioBlockAttachmentIds
+                            }
+                            if (visibleAttachments.isNotEmpty()) {
                                 Text(
                                     "پیوست‌ها",
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                                 )
-                                attachments.forEach { attachment ->
+                                visibleAttachments.forEach { attachment ->
                                     when {
                                         attachment.mimeType.startsWith("image/") ->
                                             ImageAttachmentCard(attachment.localPath, attachment.fileName, attachment.sizeBytes) {
@@ -1201,6 +1210,8 @@ private fun DraggableBlockEditor(
     block: NoteBlockEntity,
     index: Int,
     allBlocks: List<NoteBlockEntity>,
+    attachments: List<com.einote.app.data.AttachmentEntity>,
+    attachmentViewModel: AttachmentViewModel,
     viewModel: NoteViewModel,
     onReminderScheduled: () -> Unit,
     onDraggingChanged: (Boolean) -> Unit,
@@ -1279,7 +1290,16 @@ private fun DraggableBlockEditor(
             }
 
             Box(Modifier.weight(1f)) {
-                StyledBlockEditor(block, viewModel, onReminderScheduled)
+                StyledBlockEditor(
+                    block = block,
+                    viewModel = viewModel,
+                    attachment = attachments.firstOrNull { it.id == block.content.toLongOrNull() },
+                    onDeleteAudio = {
+                        attachments.firstOrNull { it.id == block.content.toLongOrNull() }?.let { attachmentViewModel.delete(it) }
+                        viewModel.deleteBlock(block)
+                    },
+                    onReminderScheduled = onReminderScheduled
+                )
             }
         }
     }
@@ -1289,6 +1309,8 @@ private fun DraggableBlockEditor(
 private fun StyledBlockEditor(
     block: NoteBlockEntity,
     viewModel: NoteViewModel,
+    attachment: com.einote.app.data.AttachmentEntity?,
+    onDeleteAudio: () -> Unit,
     onReminderScheduled: () -> Unit
 ) {
     var value by remember(block.id, block.content) { mutableStateOf(block.content) }
@@ -1297,6 +1319,37 @@ private fun StyledBlockEditor(
     val context = LocalContext.current
     val textColor = if (block.textColor == 0L) MaterialTheme.colorScheme.onSurface else Color(block.textColor.toULong())
     val size = block.textSizeSp.coerceIn(13f, 32f)
+
+    if (block.type == BlockType.AUDIO.name) {
+        if (attachment != null) {
+            AudioBlockEditor(
+                attachment = attachment,
+                onDelete = onDeleteAudio
+            )
+        } else {
+            Card(
+                Modifier.fillMaxWidth().padding(12.dp),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        "فایل صوتی پیدا نشد",
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    IconButton(onClick = onDeleteAudio) {
+                        Icon(Icons.Default.DeleteOutline, "حذف بلوک صوتی")
+                    }
+                }
+            }
+        }
+        return
+    }
 
     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -1459,6 +1512,99 @@ private fun BasicEditorField(
             inner()
         }
     )
+}
+
+@Composable
+private fun AudioBlockEditor(
+    attachment: com.einote.app.data.AttachmentEntity,
+    onDelete: () -> Unit
+) {
+    var playing by remember(attachment.id) { mutableStateOf(false) }
+    var player by remember(attachment.id) { mutableStateOf<MediaPlayer?>(null) }
+    var durationMs by remember(attachment.id) { mutableIntStateOf(0) }
+
+    DisposableEffect(attachment.id) {
+        onDispose {
+            player?.release()
+            player = null
+        }
+    }
+
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(14.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = androidx.compose.foundation.shape.CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(
+                    Icons.Default.GraphicEq,
+                    null,
+                    Modifier.padding(10.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("یادداشت صوتی", fontWeight = FontWeight.SemiBold)
+                Text(
+                    formatFileSize(attachment.sizeBytes),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (durationMs > 0) {
+                    Text(
+                        String.format(java.util.Locale.US, "%d:%02d", durationMs / 60000, (durationMs / 1000) % 60),
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+            IconButton(
+                onClick = {
+                    if (playing) {
+                        player?.pause()
+                        playing = false
+                    } else {
+                        runCatching {
+                            val next = MediaPlayer().apply {
+                                setDataSource(attachment.localPath)
+                                prepare()
+                                durationMs = duration
+                                setOnCompletionListener {
+                                    playing = false
+                                    release()
+                                    player = null
+                                }
+                                start()
+                            }
+                            player?.release()
+                            player = next
+                            playing = true
+                        }
+                    }
+                }
+            ) {
+                Icon(
+                    if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    if (playing) "مکث صدا" else "پخش صدا"
+                )
+            }
+            IconButton(onClick = {
+                player?.stop()
+                player?.release()
+                player = null
+                playing = false
+                onDelete()
+            }) {
+                Icon(Icons.Default.DeleteOutline, "حذف صدا")
+            }
+        }
+    }
 }
 
 @Composable
