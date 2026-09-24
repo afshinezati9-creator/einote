@@ -43,6 +43,9 @@ import com.einote.app.ui.SecurityViewModel
 import com.einote.app.ui.SettingsViewModel
 import com.einote.app.ui.EiNoteTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -460,8 +463,12 @@ private fun HomeScreen(
     val archivedOnly by viewModel.archivedOnlyFilter.collectAsState()
     val selectedTag by viewModel.selectedTagFilter.collectAsState()
     val sort by viewModel.sortFilter.collectAsState()
+    val screenWidth = LocalConfiguration.current.screenWidthDp
+    val isPhone = screenWidth < 600
+    val isTablet = screenWidth in 600..839
     var searchOpen by remember { mutableStateOf(false) }
     var filtersOpen by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }
 
     val allTags = remember(notes) {
         notes.flatMap { it.tags.split(',', '،').map { tag -> tag.trim() }.filter { it.isNotBlank() } }
@@ -487,21 +494,93 @@ private fun HomeScreen(
                 navigationIcon = { IconButton(onClick={searchOpen=false;viewModel.setSearchQuery("")}){Icon(Icons.Default.ArrowBack,"بازگشت")} },
                 actions = { IconButton(onClick={filtersOpen=true}){Icon(Icons.Default.FilterList,"فیلترها")} }
             ) else CenterAlignedTopAppBar(
-                title={Text("eiNote",fontWeight=FontWeight.SemiBold)},
-                actions={
-                    IconButton(onClick=onPlanner){Icon(Icons.Default.CalendarMonth,"برنامه")}
-                    IconButton(onClick=onFinance){Icon(Icons.Default.AccountBalanceWallet,"مالی")}
-                    IconButton(onClick=onBackup){Icon(Icons.Default.SettingsBackupRestore,"پشتیبان")}
-                    IconButton(onClick=onSecurity){Icon(Icons.Default.Lock,"امنیت")}
-                    IconButton(onClick=onSettings){Icon(Icons.Default.Settings,"تنظیمات")}
-                    IconButton(onClick={ { filtersOpen = true } }){Icon(Icons.Default.FilterList,"فیلترها")}
-                    IconButton(onClick={ { searchOpen=true } }){Icon(Icons.Default.Search,"جستجو")}
+                title = {
+                    Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                        Text("eiNote", fontWeight = FontWeight.SemiBold)
+                        if (!isPhone) {
+                            Text(
+                                "دفترچه شخصی",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    if (isPhone) {
+                        IconButton(onClick = { moreOpen = true }) {
+                            Icon(Icons.Default.Menu, "منوی بیشتر")
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { searchOpen = true }) {
+                        Icon(Icons.Default.Search, "جستجو")
+                    }
+                    IconButton(onClick = { filtersOpen = true }) {
+                        Icon(Icons.Default.FilterList, "فیلترها")
+                    }
+                    if (!isPhone) {
+                        IconButton(onClick = onPlanner) {
+                            Icon(Icons.Default.CalendarMonth, "برنامه")
+                        }
+                        IconButton(onClick = onFinance) {
+                            Icon(Icons.Default.AccountBalanceWallet, "مالی")
+                        }
+                    } else {
+                        Box {
+                            IconButton(onClick = { moreOpen = true }) {
+                                Icon(Icons.Default.MoreVert, "بیشتر")
+                            }
+                            DropdownMenu(
+                                expanded = moreOpen,
+                                onDismissRequest = { moreOpen = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = { Text("برنامه‌ریزی") },
+                                    leadingIcon = { Icon(Icons.Default.CalendarMonth, null) },
+                                    onClick = { moreOpen = false; onPlanner() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("حساب‌کتاب") },
+                                    leadingIcon = { Icon(Icons.Default.AccountBalanceWallet, null) },
+                                    onClick = { moreOpen = false; onFinance() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("پشتیبان") },
+                                    leadingIcon = { Icon(Icons.Default.SettingsBackupRestore, null) },
+                                    onClick = { moreOpen = false; onBackup() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("امنیت") },
+                                    leadingIcon = { Icon(Icons.Default.Lock, null) },
+                                    onClick = { moreOpen = false; onSecurity() }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("تنظیمات") },
+                                    leadingIcon = { Icon(Icons.Default.Settings, null) },
+                                    onClick = { moreOpen = false; onSettings() }
+                                )
+                            }
+                        }
+                    }
+                    if (!isPhone) {
+                        IconButton(onClick = onBackup) {
+                            Icon(Icons.Default.SettingsBackupRestore, "پشتیبان")
+                        }
+                        IconButton(onClick = onSecurity) {
+                            Icon(Icons.Default.Lock, "امنیت")
+                        }
+                        IconButton(onClick = onSettings) {
+                            Icon(Icons.Default.Settings, "تنظیمات")
+                        }
+                    }
                 }
             )
         },
         floatingActionButton={FloatingActionButton(onClick=onCreate){Icon(Icons.Default.Edit,"یادداشت جدید")}}
     ){padding->
-        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal=20.dp)){
+        Column(Modifier.fillMaxSize().padding(padding).padding(horizontal = if (isPhone) 14.dp else if (isTablet) 24.dp else 20.dp)){
             Spacer(Modifier.height(18.dp)); Text("دفتر من",style=MaterialTheme.typography.headlineMedium)
             Text(when {query.isNotBlank()->"نتیجه‌های جستجو";activeFilters>0->"یادداشت‌های فیلترشده";else->"هر چیزی که می‌خواهی، همین‌جا."})
             if(selectedTag!=null){Spacer(Modifier.height(8.dp));AssistChip(onClick={viewModel.setSelectedTag(null)},label={Text("#$selectedTag")},trailingIcon={Icon(Icons.Default.Close,"حذف")})}
@@ -748,6 +827,10 @@ private fun NoteEditor(
     val attachments by attachmentViewModel.observe(noteId).collectAsState(initial = emptyList())
     val isRecording by attachmentViewModel.isRecording.collectAsState()
 
+    val screenWidth = LocalConfiguration.current.screenWidthDp
+    val isPhone = screenWidth < 600
+    val isTablet = screenWidth in 600..839
+
     val attachmentPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { attachmentViewModel.addFromUri(noteId, it) }
     }
@@ -840,6 +923,7 @@ private fun NoteEditor(
         },
         bottomBar = {
             NoteComposerToolbar(
+                compact = isPhone,
                 isRecording = isRecording,
                 onText = { viewModel.addTextBlock(noteId) },
                 onChecklist = { viewModel.addChecklistBlock(noteId) },
@@ -862,7 +946,10 @@ private fun NoteEditor(
             Modifier.fillMaxSize().padding(padding)
         ) {
             Column(
-                Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = if (isPhone) 12.dp else if (isTablet) 24.dp else 18.dp, vertical = if (isPhone) 8.dp else 12.dp)
+                    .widthIn(max = if (isPhone) Dp.Infinity else 980.dp),
                 verticalArrangement = Arrangement.spacedBy(9.dp)
             ) {
                 Text(
@@ -958,6 +1045,7 @@ private fun NoteEditor(
 
 @Composable
 private fun NoteComposerToolbar(
+    compact: Boolean,
     isRecording: Boolean,
     onText: () -> Unit,
     onChecklist: () -> Unit,
@@ -974,17 +1062,20 @@ private fun NoteComposerToolbar(
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
     ) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 7.dp),
+            Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = if (compact) 4.dp else 8.dp, vertical = 6.dp),
             verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            ComposerTool(Icons.Default.Notes, "متن", onText)
-            ComposerTool(Icons.Default.Checklist, "چک", onChecklist)
-            ComposerTool(Icons.Default.FormatListBulleted, "لیست", onBullet)
+            ComposerTool(Icons.Default.Notes, if (compact) "متن" else "متن", onText)
+            ComposerTool(Icons.Default.Checklist, if (compact) "چک" else "چک‌لیست", onChecklist)
+            ComposerTool(Icons.Default.FormatListBulleted, if (compact) "لیست" else "فهرست", onBullet)
             ComposerTool(Icons.Default.Photo, "عکس", onPhoto)
-            ComposerTool(Icons.Default.AttachFile, "فایل", onFile)
+            ComposerTool(Icons.Default.AttachFile, if (compact) "فایل" else "فایل", onFile)
             ComposerTool(if (isRecording) Icons.Default.Stop else Icons.Default.Mic, if (isRecording) "توقف" else "صدا", onAudio)
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.width(if (compact) 4.dp else 12.dp))
             IconButton(onClick = onClose) {
                 Icon(Icons.Default.Check, "ذخیره و بستن")
             }
