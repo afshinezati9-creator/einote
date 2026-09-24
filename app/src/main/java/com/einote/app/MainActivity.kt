@@ -41,6 +41,7 @@ import androidx.core.content.ContextCompat
 import com.einote.app.security.SecurityManager
 import com.einote.app.ui.SecurityViewModel
 import com.einote.app.ui.SettingsViewModel
+import com.einote.app.settings.SettingsManager
 import com.einote.app.ui.EiNoteTheme
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -78,6 +79,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     val themeMode by settingsViewModel.themeMode.collectAsState()
     val accent by settingsViewModel.accent.collectAsState()
     val textScale by settingsViewModel.textScale.collectAsState()
+    val editorMode by settingsViewModel.editorMode.collectAsState()
 
     var editingId by remember { mutableStateOf<Long?>(null) }
     var plannerOpen by remember { mutableStateOf(false) }
@@ -138,7 +140,8 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
                 noteId = editingId!!,
                 viewModel = viewModel,
                 onClose = { editingId = null },
-                onReminderScheduled = ::askNotificationPermission
+                onReminderScheduled = ::askNotificationPermission,
+                editorMode = editorMode
             )
             plannerOpen -> PlannerScreen(viewModel, onBack = { plannerOpen = false })
             financeOpen -> FinanceScreen(financeViewModel, onBack = { financeOpen = false })
@@ -249,6 +252,7 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
     val showArchived by viewModel.showArchived.collectAsState()
     val notifications by viewModel.notifications.collectAsState()
     val compactBlocks by viewModel.compactBlocks.collectAsState()
+    val editorMode by viewModel.editorMode.collectAsState()
 
     BackHandler { onBack() }
 
@@ -343,6 +347,23 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
                             checked = compactBlocks,
                             onCheckedChange = viewModel::setCompactBlocks
                         )
+                        Text("حالت ویرایش", fontWeight = FontWeight.Medium)
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                SettingsManager.EDITOR_STANDARD to "استاندارد",
+                                SettingsManager.EDITOR_COMPACT to "فشرده",
+                                SettingsManager.EDITOR_FOCUS to "تمرکز"
+                            ).forEach { (value, label) ->
+                                FilterChip(
+                                    selected = editorMode == value,
+                                    onClick = { viewModel.setEditorMode(value) },
+                                    label = { Text(label) }
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -880,13 +901,16 @@ private fun NoteEditor(
     noteId: Long,
     viewModel: NoteViewModel,
     onClose: () -> Unit,
-    onReminderScheduled: () -> Unit
+    onReminderScheduled: () -> Unit,
+    editorMode: String = SettingsManager.EDITOR_STANDARD
 ) {
     var note by remember(noteId) { mutableStateOf<NoteEntity?>(null) }
     var loaded by remember(noteId) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var orderedBlocks by remember(noteId) { mutableStateOf<List<NoteBlockEntity>>(emptyList()) }
     var dragging by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    var hasSaved by remember { mutableStateOf(true) }
 
     val blocks by viewModel.observeBlocks(noteId).collectAsState(initial = emptyList())
     val attachmentViewModel: AttachmentViewModel = viewModel()
@@ -930,9 +954,15 @@ private fun NoteEditor(
     }
 
     val current = note!!
+    val focusMode = editorMode == SettingsManager.EDITOR_FOCUS
+    val compactMode = editorMode == SettingsManager.EDITOR_COMPACT
     LaunchedEffect(current.title, current.tags, current.space, current.color) {
+        hasSaved = false
+        saving = true
         delay(450)
         viewModel.saveNote(current)
+        saving = false
+        hasSaved = true
     }
 
     Scaffold(
@@ -947,9 +977,20 @@ private fun NoteEditor(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            PersianFormat.jalaliDate(current.updatedAt),
-                            style = MaterialTheme.typography.labelSmall
+                            when {
+                                saving -> "در حال ذخیره…"
+                                hasSaved -> "ذخیره شد"
+                                else -> "تغییرات ذخیره نشده"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (saving) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        if (!focusMode) {
+                            Text(
+                                PersianFormat.jalaliDate(current.updatedAt),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
                     }
                 },
                 navigationIcon = {
@@ -1025,7 +1066,7 @@ private fun NoteEditor(
                 )
             }
             NoteComposerToolbar(
-                compact = isPhone,
+                compact = isPhone || compactMode || focusMode,
                 isRecording = isRecording,
                 onText = { viewModel.addTextBlockAt(noteId, orderedBlocks.size) },
                 onChecklist = { viewModel.addChecklistBlockAt(noteId, orderedBlocks.size) },
@@ -1075,20 +1116,22 @@ private fun NoteEditor(
                     leadingIcon = { Icon(Icons.Default.Title, null) },
                     shape = RoundedCornerShape(18.dp)
                 )
-                NoteSpaceAndColorRow(
-                    current = current,
-                    onSpace = { value -> note = current.copy(space = value) },
-                    onColor = { value -> note = current.copy(color = value) }
-                )
-                OutlinedTextField(
-                    value = current.tags,
-                    onValueChange = { note = current.copy(tags = it) },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    placeholder = { Text("برچسب‌ها را بنویس؛ مثلاً کار، ایده، شخصی") },
-                    leadingIcon = { Icon(Icons.Default.Label, null) },
-                    shape = RoundedCornerShape(18.dp)
-                )
+                if (!focusMode) {
+                    NoteSpaceAndColorRow(
+                        current = current,
+                        onSpace = { value -> note = current.copy(space = value) },
+                        onColor = { value -> note = current.copy(color = value) }
+                    )
+                    OutlinedTextField(
+                        value = current.tags,
+                        onValueChange = { note = current.copy(tags = it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        placeholder = { Text("برچسب‌ها را بنویس؛ مثلاً کار، ایده، شخصی") },
+                        leadingIcon = { Icon(Icons.Default.Label, null) },
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                }
             }
 
             Surface(
@@ -1104,8 +1147,8 @@ private fun NoteEditor(
                     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier.fillMaxSize().padding(horizontal = if (focusMode) 8.dp else 14.dp, vertical = if (compactMode || focusMode) 6.dp else 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (compactMode || focusMode) 5.dp else 10.dp)
                     ) {
                         itemsIndexed(orderedBlocks, key = { _, item -> item.id }) { index, block ->
                             DraggableBlockEditor(
@@ -1118,7 +1161,8 @@ private fun NoteEditor(
                                 onReminderScheduled = onReminderScheduled,
                                 onDraggingChanged = { dragging = it },
                                 onOrderChanged = { orderedBlocks = it },
-                                listState = listState
+                                listState = listState,
+                                compact = compactMode || focusMode
                             )
                         }
 
@@ -1355,7 +1399,8 @@ private fun DraggableBlockEditor(
     onReminderScheduled: () -> Unit,
     onDraggingChanged: (Boolean) -> Unit,
     onOrderChanged: (List<NoteBlockEntity>) -> Unit,
-    listState: androidx.compose.foundation.lazy.LazyListState
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    compact: Boolean = false
 ) {
     var dragOffset by remember(block.id) { mutableFloatStateOf(0f) }
     val currentIndex = remember { mutableIntStateOf(index) }
@@ -1375,7 +1420,7 @@ private fun DraggableBlockEditor(
         Row(Modifier.fillMaxWidth()) {
             Box(
                 Modifier
-                    .width(42.dp)
+                    .width(if (compact) 32.dp else 42.dp)
                     .fillMaxHeight()
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
                     .pointerInput(allBlocks, index) {
