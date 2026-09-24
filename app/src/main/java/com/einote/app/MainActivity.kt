@@ -1150,48 +1150,59 @@ private fun NoteEditor(
                         modifier = Modifier.fillMaxSize().padding(horizontal = if (focusMode) 8.dp else 14.dp, vertical = if (compactMode || focusMode) 6.dp else 10.dp),
                         verticalArrangement = Arrangement.spacedBy(if (compactMode || focusMode) 5.dp else 10.dp)
                     ) {
-                        itemsIndexed(orderedBlocks, key = { _, item -> item.id }) { index, block ->
-                            DraggableBlockEditor(
-                                block = block,
-                                index = index,
-                                allBlocks = orderedBlocks,
-                                attachments = attachments,
-                                attachmentViewModel = attachmentViewModel,
-                                viewModel = viewModel,
-                                onReminderScheduled = onReminderScheduled,
-                                onDraggingChanged = { dragging = it },
-                                onOrderChanged = { orderedBlocks = it },
-                                listState = listState,
-                                compact = compactMode || focusMode
-                            )
-                        }
-
-                        item(key = "insert-after-$index") {
-                            BlockInsertRow(
-                                onText = {
-                                    mediaInsertPosition = index + 1
-                                    viewModel.addTextBlockAt(noteId, index + 1)
-                                },
-                                onChecklist = {
-                                    mediaInsertPosition = index + 1
-                                    viewModel.addChecklistBlockAt(noteId, index + 1)
-                                },
-                                onBullet = {
-                                    mediaInsertPosition = index + 1
-                                    viewModel.addBulletBlockAt(noteId, index + 1)
-                                },
-                                onPhoto = {
-                                    mediaInsertPosition = index + 1
-                                    photoPicker.launch(
-                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                    )
-                                },
-                                onAudio = {
-                                    mediaInsertPosition = index + 1
-                                    showRecordingPanel = true
-                                    audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        items(
+                            count = orderedBlocks.size * 2,
+                            key = { renderIndex ->
+                                if (renderIndex % 2 == 0) {
+                                    "block-" + orderedBlocks[renderIndex / 2].id
+                                } else {
+                                    "insert-after-" + (renderIndex / 2)
                                 }
-                            )
+                            }
+                        ) { renderIndex ->
+                            val index = renderIndex / 2
+                            if (renderIndex % 2 == 0) {
+                                val block = orderedBlocks[index]
+                                DraggableBlockEditor(
+                                    block = block,
+                                    index = index,
+                                    allBlocks = orderedBlocks,
+                                    attachments = attachments,
+                                    attachmentViewModel = attachmentViewModel,
+                                    viewModel = viewModel,
+                                    onReminderScheduled = onReminderScheduled,
+                                    onDraggingChanged = { dragging = it },
+                                    onOrderChanged = { orderedBlocks = it },
+                                    listState = listState,
+                                    compact = compactMode || focusMode
+                                )
+                            } else {
+                                BlockInsertRow(
+                                    onText = {
+                                        mediaInsertPosition = index + 1
+                                        viewModel.addTextBlockAt(noteId, index + 1)
+                                    },
+                                    onChecklist = {
+                                        mediaInsertPosition = index + 1
+                                        viewModel.addChecklistBlockAt(noteId, index + 1)
+                                    },
+                                    onBullet = {
+                                        mediaInsertPosition = index + 1
+                                        viewModel.addBulletBlockAt(noteId, index + 1)
+                                    },
+                                    onPhoto = {
+                                        mediaInsertPosition = index + 1
+                                        photoPicker.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    onAudio = {
+                                        mediaInsertPosition = index + 1
+                                        showRecordingPanel = true
+                                        audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                    }
+                                )
+                            }
                         }
 
                         item {
