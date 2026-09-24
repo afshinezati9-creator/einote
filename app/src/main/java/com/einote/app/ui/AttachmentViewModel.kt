@@ -24,6 +24,14 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
+    private val _recordingStartedAt = MutableStateFlow<Long?>(null)
+    val recordingStartedAt: StateFlow<Long?> = _recordingStartedAt.asStateFlow()
+
+    private val _recordingElapsedMs = MutableStateFlow(0L)
+    val recordingElapsedMs: StateFlow<Long> = _recordingElapsedMs.asStateFlow()
+
+    private var recordingTicker: kotlinx.coroutines.Job? = null
+
     fun observe(noteId: Long): Flow<List<AttachmentEntity>> = dao.observeForNote(noteId)
 
     fun addFromUri(noteId: Long, uri: Uri) = viewModelScope.launch {
@@ -55,6 +63,15 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                 recordingNoteId = noteId
                 recordingFile = file
                 _isRecording.value = true
+                _recordingStartedAt.value = System.currentTimeMillis()
+                _recordingElapsedMs.value = 0L
+                recordingTicker?.cancel()
+                recordingTicker = viewModelScope.launch {
+                    while (_isRecording.value) {
+                        _recordingElapsedMs.value = System.currentTimeMillis() - (_recordingStartedAt.value ?: System.currentTimeMillis())
+                        kotlinx.coroutines.delay(250)
+                    }
+                }
             }
         }.isSuccess
     }
@@ -67,6 +84,10 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         recordingFile = null
         recordingNoteId = null
         _isRecording.value = false
+        recordingTicker?.cancel()
+        recordingTicker = null
+        _recordingElapsedMs.value = if (_recordingStartedAt.value != null) System.currentTimeMillis() - _recordingStartedAt.value!! else 0L
+        _recordingStartedAt.value = null
         runCatching { activeRecorder.stop() }
             .onSuccess {
                 activeRecorder.release()
@@ -103,6 +124,10 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         }
         runCatching { recordingFile?.delete() }
         recorder = null
+        recordingTicker?.cancel()
+        recordingTicker = null
+        _isRecording.value = false
+        _recordingStartedAt.value = null
         super.onCleared()
     }
 
