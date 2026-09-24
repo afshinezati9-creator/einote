@@ -838,7 +838,7 @@ private fun NoteEditor(
         uri?.let { attachmentViewModel.addFromUri(noteId, it) }
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        uri?.let { attachmentViewModel.addFromUri(noteId, it) }
+        uri?.let { attachmentViewModel.addImageFromUri(noteId, it) }
     }
     val audioPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) attachmentViewModel.startVoiceRecording(noteId)
@@ -1051,8 +1051,12 @@ private fun NoteEditor(
                                 .filter { it.type == BlockType.AUDIO.name }
                                 .mapNotNull { it.content.toLongOrNull() }
                                 .toSet()
+                            val mediaBlockAttachmentIds = orderedBlocks
+                                .filter { it.type == BlockType.AUDIO.name || it.type == BlockType.IMAGE.name }
+                                .mapNotNull { it.content.toLongOrNull() }
+                                .toSet()
                             val visibleAttachments = attachments.filterNot {
-                                it.mimeType.startsWith("audio/") && it.id in audioBlockAttachmentIds
+                                it.id in mediaBlockAttachmentIds
                             }
                             if (visibleAttachments.isNotEmpty()) {
                                 Text(
@@ -1320,12 +1324,19 @@ private fun StyledBlockEditor(
     val textColor = if (block.textColor == 0L) MaterialTheme.colorScheme.onSurface else Color(block.textColor.toULong())
     val size = block.textSizeSp.coerceIn(13f, 32f)
 
-    if (block.type == BlockType.AUDIO.name) {
+    if (block.type == BlockType.AUDIO.name || block.type == BlockType.IMAGE.name) {
         if (attachment != null) {
-            AudioBlockEditor(
-                attachment = attachment,
-                onDelete = onDeleteAudio
-            )
+            if (block.type == BlockType.AUDIO.name) {
+                AudioBlockEditor(
+                    attachment = attachment,
+                    onDelete = onDeleteAudio
+                )
+            } else {
+                ImageBlockEditor(
+                    attachment = attachment,
+                    onDelete = onDeleteAudio
+                )
+            }
         } else {
             Card(
                 Modifier.fillMaxWidth().padding(12.dp),
@@ -1335,10 +1346,14 @@ private fun StyledBlockEditor(
                     Modifier.fillMaxWidth().padding(14.dp),
                     verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.error)
+                    Icon(
+                        if (block.type == BlockType.IMAGE.name) Icons.Default.Image else Icons.Default.GraphicEq,
+                        null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
                     Spacer(Modifier.width(10.dp))
                     Text(
-                        "فایل صوتی پیدا نشد",
+                        if (block.type == BlockType.IMAGE.name) "فایل تصویری پیدا نشد" else "فایل صوتی پیدا نشد",
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.error
                     )
@@ -1512,6 +1527,45 @@ private fun BasicEditorField(
             inner()
         }
     )
+}
+
+@Composable
+private fun ImageBlockEditor(
+    attachment: com.einote.app.data.AttachmentEntity,
+    onDelete: () -> Unit
+) {
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(Modifier.padding(10.dp)) {
+            AsyncImage(
+                model = File(attachment.localPath),
+                contentDescription = attachment.fileName,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .clip(RoundedCornerShape(14.dp))
+            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("عکس", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        attachment.fileName,
+                        maxLines = 1,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.DeleteOutline, "حذف عکس")
+                }
+            }
+        }
+    }
 }
 
 @Composable
