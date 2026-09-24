@@ -4,20 +4,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.devtools.ksp")
 }
-
 android {
     namespace="com.einote.app"
     compileSdk=35
-
     defaultConfig {
         applicationId="com.einote.app"
         minSdk=26
         targetSdk=35
-        versionCode=4
-        versionName="0.4.0"
+        versionCode=5
+        versionName="0.5.0"
     }
 }
-
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))
     implementation("androidx.activity:activity-compose:1.10.0")
@@ -32,5 +29,6 @@ dependencies {
     implementation("androidx.room:room-ktx:2.7.0")
     ksp("androidx.room:room-compiler:2.7.0")
     implementation("androidx.work:work-runtime-ktx:2.10.1")
+    implementation("io.coil-kt:coil-compose:2.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
