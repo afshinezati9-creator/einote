@@ -47,6 +47,9 @@ interface NoteBlockDao {
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM note_blocks WHERE noteId = :noteId")
     suspend fun nextPosition(noteId: Long): Int
 
+    @Query("UPDATE note_blocks SET position = position + 1, updatedAt = :updatedAt WHERE noteId = :noteId AND position >= :position")
+    suspend fun shiftPositions(noteId: Long, position: Int, updatedAt: Long)
+
     @Query("UPDATE note_blocks SET position = :position, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updatePosition(id: Long, position: Int, updatedAt: Long)
 }
