@@ -680,7 +680,7 @@ private fun HomeScreen(
                     }
                 }
                 else -> {
-                    item { PlannerHero(plannedBlocks.size, plannedBlocks.count { it.checked }) }
+                    item { PlannerHero(plannedBlocks.size, plannedBlocks.count { it.checked }, dashboardSpacing) }
                     item { Text("کارهای پیش‌رو", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
                     if (plannedBlocks.isEmpty()) item { PlannerEmptyState(onPlanner) }
                     else {
@@ -822,10 +822,10 @@ private fun FinanceEmptyState(onOpen: () -> Unit) {
 }
 
 @Composable
-private fun PlannerHero(total: Int, completed: Int) {
+private fun PlannerHero(total: Int, completed: Int, spacing: Dp) {
     val progress = if (total == 0) 0f else completed.toFloat() / total
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(dashboardSpacing)) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(spacing)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
                     Text("برنامه امروز", style = MaterialTheme.typography.labelLarge)
