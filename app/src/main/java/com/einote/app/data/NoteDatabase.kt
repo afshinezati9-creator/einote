@@ -71,11 +71,13 @@ abstract class NoteDatabase : RoomDatabase() {
             }
         }
 
+        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+
         fun get(context: Context): NoteDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext, NoteDatabase::class.java, "einote.db"
-                ).addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
+                ).addMigrations(*ALL_MIGRATIONS).build()
                     .also { INSTANCE = it }
             }
     }
