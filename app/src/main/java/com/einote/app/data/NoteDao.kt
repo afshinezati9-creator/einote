@@ -11,12 +11,13 @@ import kotlinx.coroutines.flow.Flow
 interface NoteDao {
     @Query("""
         SELECT * FROM notes
-        WHERE isArchived = 0
-        AND (
+        WHERE (
             :query = '' OR
             title LIKE '%' || :query || '%' OR
             content LIKE '%' || :query || '%' OR
-            tags LIKE '%' || :query || '%'
+            tags LIKE '%' || :query || '%' OR
+            EXISTS (SELECT 1 FROM note_blocks WHERE note_blocks.noteId = notes.id AND note_blocks.content LIKE '%' || :query || '%') OR
+            EXISTS (SELECT 1 FROM attachments WHERE attachments.noteId = notes.id AND attachments.fileName LIKE '%' || :query || '%')
         )
         ORDER BY isPinned DESC, updatedAt DESC
     """)
@@ -46,6 +47,6 @@ interface NoteDao {
     @Query("UPDATE notes SET isPinned = :pinned, updatedAt = :updatedAt WHERE id = :id")
     suspend fun setPinned(id: Long, pinned: Boolean, updatedAt: Long)
 
-    @Query("UPDATE notes SET isArchived = 1, updatedAt = :updatedAt WHERE id = :id")
-    suspend fun archive(id: Long, updatedAt: Long)
+    @Query("UPDATE notes SET isArchived = :archived, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun setArchived(id: Long, archived: Boolean, updatedAt: Long)
 }
