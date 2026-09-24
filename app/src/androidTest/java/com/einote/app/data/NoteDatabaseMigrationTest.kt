@@ -116,6 +116,9 @@ class NoteDatabaseMigrationTest {
             )
             """.trimIndent()
         )
+        database.execSQL(
+            "CREATE INDEX index_note_blocks_noteId_position ON note_blocks(noteId, position)"
+        )
 
         if (insertData) {
             database.insertWithOnConflict(
