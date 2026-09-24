@@ -75,7 +75,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     val context = LocalContext.current
     val settingsViewModel: SettingsViewModel = viewModel()
     val securityViewModel: SecurityViewModel = viewModel()
-    val darkMode by settingsViewModel.darkMode.collectAsState()
+    val themeMode by settingsViewModel.themeMode.collectAsState()
     val accent by settingsViewModel.accent.collectAsState()
     val textScale by settingsViewModel.textScale.collectAsState()
 
@@ -124,7 +124,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
         }
     }
 
-    EiNoteTheme(darkMode, accent, textScale) {
+    EiNoteTheme(themeMode, accent, textScale) {
         when {
             locked -> LockScreen(
                 viewModel = securityViewModel,
@@ -242,7 +242,7 @@ private fun LockScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
-    val darkMode by viewModel.darkMode.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
     val accent by viewModel.accent.collectAsState()
     val textScale by viewModel.textScale.collectAsState()
     val pinnedFirst by viewModel.pinnedFirst.collectAsState()
@@ -273,20 +273,34 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
             item {
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column(Modifier.weight(1f)) {
-                                Text("حالت تاریک", fontWeight = FontWeight.Medium)
-                                Text("ظاهر آرام‌تر برای استفاده در نور کم.", style = MaterialTheme.typography.bodySmall)
+                        Text("حالت نمایش", fontWeight = FontWeight.Medium)
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            listOf(
+                                "system" to "سیستم",
+                                "light" to "روشن",
+                                "dark" to "تاریک"
+                            ).forEach { (value, label) ->
+                                FilterChip(
+                                    selected = themeMode == value,
+                                    onClick = { viewModel.setThemeMode(value) },
+                                    label = { Text(label) }
+                                )
                             }
-                            Switch(checked = darkMode, onCheckedChange = viewModel::setDarkMode)
                         }
                         Text("رنگ تأکیدی", fontWeight = FontWeight.Medium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             listOf(
                                 "blue" to "آبی",
                                 "purple" to "بنفش",
                                 "green" to "سبز",
-                                "orange" to "نارنجی"
+                                "orange" to "نارنجی",
+                                "pink" to "صورتی"
                             ).forEach { (value, label) ->
                                 FilterChip(
                                     selected = accent == value,
@@ -349,7 +363,7 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
                     Column(Modifier.padding(16.dp)) {
                         Text("فونت", fontWeight = FontWeight.Medium)
                         Text(
-                            "پشتیبانی RTL و فارسی فعال است. فونت فارسی Bundled در مرحله بعدی تکمیل انتشار منابع اضافه می‌شود.",
+                            "اندازه متن، حالت نمایش و رنگ تأکیدی از همین بخش قابل شخصی‌سازی است.",
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
