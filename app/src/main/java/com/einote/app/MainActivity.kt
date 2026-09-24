@@ -486,7 +486,7 @@ private fun HomeScreen(
                     IconButton(onClick=onBackup){Icon(Icons.Default.SettingsBackupRestore,"پشتیبان")}
                     IconButton(onClick=onSecurity){Icon(Icons.Default.Lock,"امنیت")}
                     IconButton(onClick=onSettings){Icon(Icons.Default.Settings,"تنظیمات")}
-                    IconButton(onClick={filtersOpen::let}){Icon(Icons.Default.FilterList,"فیلترها")}
+                    IconButton(onClick={ { filtersOpen = true } }){Icon(Icons.Default.FilterList,"فیلترها")}
                     IconButton(onClick={ { searchOpen=true } }){Icon(Icons.Default.Search,"جستجو")}
                 }
             )
