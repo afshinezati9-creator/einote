@@ -1,4 +1,32 @@
 package com.einote.app
+            if (tab == 0) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AssistChip(
+                            onClick = { filtersOpen = true },
+                            label = { Text(if (activeFilterCount == 0) "فیلترها" else "فیلترها · $activeFilterCount") },
+                            leadingIcon = { Icon(Icons.Default.Tune, null) }
+                        )
+                        if (selectedTag != null) {
+                            InputChip(
+                                selected = true,
+                                onClick = { viewModel.setSelectedTag(null) },
+                                label = { Text("#$selectedTag") },
+                                trailingIcon = { Icon(Icons.Default.Close, null) }
+                            )
+                        }
+                        if (pinnedOnly) {
+                            InputChip(selected = true, onClick = { viewModel.setPinnedOnly(false) }, label = { Text("سنجاق‌شده") }, trailingIcon = { Icon(Icons.Default.Close, null) })
+                        }
+                        if (archivedOnly) {
+                            InputChip(selected = true, onClick = { viewModel.setArchivedOnly(false) }, label = { Text("بایگانی") }, trailingIcon = { Icon(Icons.Default.Close, null) })
+                        }
+                    }
+                }
+            }
 
 import android.Manifest
 import android.media.MediaPlayer
@@ -545,6 +573,21 @@ private fun HomeScreen(
     val allTags = remember(notes) {
         notes.flatMap { it.tags.split(',', '،').map { tag -> tag.trim() }.filter { it.isNotBlank() } }
             .distinctBy { it.replace('ي','ی').replace('ك','ک') }.sorted()
+    }
+    val activeFilterCount = listOf(pinnedOnly, archivedOnly, selectedTag != null, sort != NoteViewModel.SORT_UPDATED).count { it }
+    val visibleNotes = remember(notes, pinnedFirst, showArchived, pinnedOnly, archivedOnly, selectedTag, sort) {
+        notes.filter { showArchived || !it.isArchived }
+            .filter { !pinnedOnly || it.isPinned }
+            .filter { !archivedOnly || it.isArchived }
+            .filter { selectedTag == null || it.tags.split(',', '،').any { t -> t.trim().replace('ي','ی').replace('ك','ک') == selectedTag } }
+            .let { list ->
+                when (sort) {
+                    NoteViewModel.SORT_CREATED -> list.sortedByDescending { it.createdAt }
+                    NoteViewModel.SORT_TITLE -> list.sortedBy { it.title.trim().ifBlank { "یادداشت بدون عنوان" } }
+                    else -> if (pinnedFirst) list.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenByDescending { it.updatedAt })
+                    else list.sortedByDescending { it.updatedAt }
+                }
+            }
     }
     val visibleNotes = remember(notes, pinnedFirst, showArchived, pinnedOnly, archivedOnly, selectedTag, sort) {
         notes.filter { showArchived || !it.isArchived }
