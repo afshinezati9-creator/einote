@@ -116,9 +116,9 @@ class NoteDatabaseMigrationTest {
         )
 
         if (insertData) {
-            database.insert(
+            database.insertWithOnConflict(
                 "notes",
-                SQLiteDatabase.CONFLICT_NONE,
+                null,
                 ContentValues().apply {
                     put("id", 7L)
                     put("title", "قدیمی")
@@ -128,11 +128,12 @@ class NoteDatabaseMigrationTest {
                     put("isArchived", 0)
                     put("createdAt", 1000L)
                     put("updatedAt", 2000L)
-                }
+                },
+                SQLiteDatabase.CONFLICT_NONE
             )
-            database.insert(
+            database.insertWithOnConflict(
                 "note_blocks",
-                SQLiteDatabase.CONFLICT_NONE,
+                null,
                 ContentValues().apply {
                     put("id", 11L)
                     put("noteId", 7L)
@@ -142,7 +143,8 @@ class NoteDatabaseMigrationTest {
                     put("position", 0)
                     put("createdAt", 1000L)
                     put("updatedAt", 2000L)
-                }
+                },
+                SQLiteDatabase.CONFLICT_NONE
             )
         }
 
