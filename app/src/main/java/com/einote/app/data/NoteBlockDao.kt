@@ -45,5 +45,5 @@ interface NoteBlockDao {
     suspend fun deleteForNote(noteId: Long)
 
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM note_blocks WHERE noteId = :noteId")
-    suspend fun nextPosition(noteId: Long)
+    suspend fun nextPosition(noteId: Long): Int
 }
