@@ -9,9 +9,18 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*\nimport androidx.compose.ui.unit.sp\nimport androidx.compose.ui.text.font.FontStyle\nimport androidx.compose.ui.input.pointer.pointerInput\nimport androidx.compose.ui.graphics.Color\nimport androidx.compose.ui.graphics.graphicsLayer\nimport androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress\nimport androidx.compose.foundation.clickable\nimport androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items\nimport androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
