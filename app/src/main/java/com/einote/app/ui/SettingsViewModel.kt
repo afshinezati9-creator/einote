@@ -34,7 +34,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _compactBlocks = MutableStateFlow(settings.compactBlocks())
     val compactBlocks: StateFlow<Boolean> = _compactBlocks.asStateFlow()
 
-    private val _dashboardDensity = MutableStateFlow(settings.dashboardDensity())\n    val dashboardDensity: StateFlow<String> = _dashboardDensity.asStateFlow()\n\n    private val _animations = MutableStateFlow(settings.animationsEnabled())\n    val animations: StateFlow<Boolean> = _animations.asStateFlow()\n\n    private val _editorMode = MutableStateFlow(settings.editorMode())
+    private val _dashboardDensity = MutableStateFlow(settings.dashboardDensity())
+    val dashboardDensity: StateFlow<String> = _dashboardDensity.asStateFlow()
+
+    private val _animations = MutableStateFlow(settings.animationsEnabled())
+    val animations: StateFlow<Boolean> = _animations.asStateFlow()
+
+    private val _editorMode = MutableStateFlow(settings.editorMode())
     val editorMode: StateFlow<String> = _editorMode.asStateFlow()
 
     fun setThemeMode(v: String) {
@@ -50,7 +56,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setShowArchived(v: Boolean) { settings.setShowArchived(v); _showArchived.value = v }
     fun setNotifications(v: Boolean) { settings.setNotificationsEnabled(v); _notifications.value = v }
     fun setCompactBlocks(v: Boolean) { settings.setCompactBlocks(v); _compactBlocks.value = v }
-    fun setDashboardDensity(v: String) {\n        settings.setDashboardDensity(v)\n        _dashboardDensity.value = settings.dashboardDensity()\n    }\n\n    fun setAnimations(v: Boolean) {\n        settings.setAnimationsEnabled(v)\n        _animations.value = settings.animationsEnabled()\n    }\n\n    fun setEditorMode(v: String) {
+    fun setDashboardDensity(v: String) {
+        settings.setDashboardDensity(v)
+        _dashboardDensity.value = settings.dashboardDensity()
+    }
+
+    fun setAnimations(v: Boolean) {
+        settings.setAnimationsEnabled(v)
+        _animations.value = settings.animationsEnabled()
+    }
+
+    fun setEditorMode(v: String) {
         settings.setEditorMode(v)
         _editorMode.value = settings.editorMode()
     }
