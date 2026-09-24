@@ -11,10 +11,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -32,8 +32,14 @@ jobs:
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="${ANDROID_HOME}/cmdline-tools/16.0/bin/sdkmanager"
           fi
+
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platform-tools" "platforms;android-35" "build-tools;35.0.0" "emulator" "system-images;android-35;google_apis;x86_64"
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "emulator" \
+            "system-images;android-34;google_apis;x86_64"
 
       - name: Run unit tests
         run: gradle testDebugUnitTest --stacktrace
@@ -44,13 +50,21 @@ jobs:
       - name: Set up emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
           arch: x86_64
           target: google_apis
           profile: pixel_2
+          force-avd-creation: true
+          emulator-options: -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
+          disable-animations: true
+          cores: 2
+          ram-size: 2048M
+          disk-size: 4096M
+          boot-timeout: 900
           script: gradle connectedDebugAndroidTest --stacktrace
 
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: einote-debug-apk
