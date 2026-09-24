@@ -44,7 +44,7 @@ class NoteDatabaseMigrationTest {
             assertEquals("کار قدیمی", block?.content)
 
             val migrated = db.openHelper.writableDatabase
-            assertEquals(7, migrated.version)
+            assertEquals(8, migrated.version)
             assertTrue(tableExists(migrated, "finance_transactions"))
             assertTrue(tableExists(migrated, "attachments"))
             assertTrue(columnExists(migrated, "note_blocks", "dueAt"))
@@ -52,6 +52,7 @@ class NoteDatabaseMigrationTest {
             assertTrue(columnExists(migrated, "note_blocks", "completedAt"))
             assertTrue(columnExists(migrated, "note_blocks", "textColor"))
             assertTrue(columnExists(migrated, "note_blocks", "textSizeSp"))
+            assertTrue(columnExists(migrated, "note_blocks", "alignment"))
             assertTrue(columnExists(migrated, "notes", "space"))
             assertTrue(columnExists(migrated, "notes", "color"))
         } finally {

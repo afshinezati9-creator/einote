@@ -23,6 +23,13 @@ interface NoteDao {
     """)
     fun observeNotes(query: String, space: String): Flow<List<NoteEntity>>
 
+    @Query("""
+        SELECT DISTINCT tags FROM notes
+        WHERE space = :space AND tags != ''
+        ORDER BY updatedAt DESC
+    """)
+    fun observeTagSources(space: String): Flow<List<String>>
+
     @Query("SELECT * FROM notes WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): NoteEntity?
 

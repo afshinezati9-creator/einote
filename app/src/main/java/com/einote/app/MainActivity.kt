@@ -1,9 +1,42 @@
 package com.einote.app
+            if (tab == 0) {
+                item {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AssistChip(
+                            onClick = { filtersOpen = true },
+                            label = { Text(if (activeFilterCount == 0) "فیلترها" else "فیلترها · $activeFilterCount") },
+                            leadingIcon = { Icon(Icons.Default.Tune, null) }
+                        )
+                        if (selectedTag != null) {
+                            InputChip(
+                                selected = true,
+                                onClick = { viewModel.setSelectedTag(null) },
+                                label = { Text("#$selectedTag") },
+                                trailingIcon = { Icon(Icons.Default.Close, null) }
+                            )
+                        }
+                        if (pinnedOnly) {
+                            InputChip(selected = true, onClick = { viewModel.setPinnedOnly(false) }, label = { Text("سنجاق‌شده") }, trailingIcon = { Icon(Icons.Default.Close, null) })
+                        }
+                        if (archivedOnly) {
+                            InputChip(selected = true, onClick = { viewModel.setArchivedOnly(false) }, label = { Text("بایگانی") }, trailingIcon = { Icon(Icons.Default.Close, null) })
+                        }
+                    }
+                }
+            }
 
 import android.Manifest
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.text.style.StrikethroughSpan
+import android.text.style.StyleSpan
+import android.text.style.UnderlineSpan
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -12,6 +45,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -27,6 +69,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -38,6 +86,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
 import androidx.core.content.ContextCompat
+import androidx.core.text.HtmlCompat
 import com.einote.app.security.SecurityManager
 import com.einote.app.ui.SecurityViewModel
 import com.einote.app.ui.SettingsViewModel
@@ -80,6 +129,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     val accent by settingsViewModel.accent.collectAsState()
     val textScale by settingsViewModel.textScale.collectAsState()
     val editorMode by settingsViewModel.editorMode.collectAsState()
+    val dashboardDensity by settingsViewModel.dashboardDensity.collectAsState()
 
     var editingId by remember { mutableStateOf<Long?>(null) }
     var plannerOpen by remember { mutableStateOf(false) }
@@ -159,7 +209,8 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
                 onFinance = { financeOpen = true },
                 onBackup = { backupOpen = true },
                 onSecurity = { securityOpen = true },
-                onSettings = { settingsOpen = true }
+                onSettings = { settingsOpen = true },
+                dashboardDensity = dashboardDensity
             )
         }
     }
@@ -252,6 +303,8 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
     val showArchived by viewModel.showArchived.collectAsState()
     val notifications by viewModel.notifications.collectAsState()
     val compactBlocks by viewModel.compactBlocks.collectAsState()
+    val dashboardDensity by viewModel.dashboardDensity.collectAsState()
+    val animations by viewModel.animations.collectAsState()
     val editorMode by viewModel.editorMode.collectAsState()
 
     BackHandler { onBack() }
@@ -488,6 +541,7 @@ private fun HomeScreen(
     viewModel: NoteViewModel, onCreate: () -> Unit, onOpen: (Long) -> Unit,
     onPlanner: () -> Unit, onFinance: () -> Unit, onBackup: () -> Unit,
     onSecurity: () -> Unit, onSettings: () -> Unit,
+    dashboardDensity: String = SettingsManager.DASHBOARD_BALANCED,
     settingsViewModel: SettingsViewModel = viewModel()
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
@@ -508,12 +562,29 @@ private fun HomeScreen(
     var searchOpen by remember { mutableStateOf(false) }
     var filtersOpen by remember { mutableStateOf(false) }
     var moreOpen by remember { mutableStateOf(false) }
+    val dashboardSpacing = when (dashboardDensity) {
+        SettingsManager.DASHBOARD_AIRY -> 18.dp
+        SettingsManager.DASHBOARD_COMPACT -> 8.dp
+        else -> 12.dp
+    }
 
     LaunchedEffect(Unit) { viewModel.setSpace("WRITING") }
 
-    val allTags = remember(notes) {
-        notes.flatMap { it.tags.split(',', '،').map { tag -> tag.trim() }.filter { it.isNotBlank() } }
-            .distinctBy { it.replace('ي','ی').replace('ك','ک') }.sorted()
+    val allTags by viewModel.allTags.collectAsState()
+    val activeFilterCount = listOf(pinnedOnly, archivedOnly, selectedTag != null, sort != NoteViewModel.SORT_UPDATED).count { it }
+    val visibleNotes = remember(notes, pinnedFirst, showArchived, pinnedOnly, archivedOnly, selectedTag, sort) {
+        notes.filter { showArchived || !it.isArchived }
+            .filter { !pinnedOnly || it.isPinned }
+            .filter { !archivedOnly || it.isArchived }
+            .filter { selectedTag == null || it.tags.split(',', '،').any { t -> t.trim().replace('ي','ی').replace('ك','ک') == selectedTag } }
+            .let { list ->
+                when (sort) {
+                    NoteViewModel.SORT_CREATED -> list.sortedByDescending { it.createdAt }
+                    NoteViewModel.SORT_TITLE -> list.sortedBy { it.title.trim().ifBlank { "یادداشت بدون عنوان" } }
+                    else -> if (pinnedFirst) list.sortedWith(compareByDescending<NoteEntity> { it.isPinned }.thenByDescending { it.updatedAt })
+                    else list.sortedByDescending { it.updatedAt }
+                }
+            }
     }
     val visibleNotes = remember(notes, pinnedFirst, showArchived, pinnedOnly, archivedOnly, selectedTag, sort) {
         notes.filter { showArchived || !it.isArchived }
@@ -533,38 +604,67 @@ private fun HomeScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text("eiNote", fontWeight = FontWeight.Bold)
-                        Text(
-                            when (tab) { 1 -> "حساب‌کتاب شخصی"; 2 -> "برنامه‌ریزی شخصی"; else -> "دفتر شخصی" },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    if (isPhone) IconButton(onClick = { moreOpen = true }) { Icon(Icons.Default.Menu, "منوی بیشتر") }
-                },
-                actions = {
-                    if (tab == 0) {
-                        IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
-                        IconButton(onClick = { filtersOpen = true }) { Icon(Icons.Default.FilterList, "فیلترها") }
-                    }
-                    if (!isPhone) {
-                        IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
-                        IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
-                        IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "تنظیمات") }
-                    } else {
-                        DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                            DropdownMenuItem(text = { Text("پشتیبان") }, leadingIcon = { Icon(Icons.Default.SettingsBackupRestore, null) }, onClick = { moreOpen = false; onBackup() })
-                            DropdownMenuItem(text = { Text("امنیت") }, leadingIcon = { Icon(Icons.Default.Lock, null) }, onClick = { moreOpen = false; onSecurity() })
-                            DropdownMenuItem(text = { Text("تنظیمات") }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = { moreOpen = false; onSettings() })
+            AnimatedContent(
+                targetState = searchOpen && tab == 0,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "home_top_bar"
+            ) { searching ->
+                if (searching) {
+                    TopAppBar(
+                        title = {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = viewModel::setSearchQuery,
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                placeholder = { Text("جستجوی یادداشت…") },
+                                leadingIcon = { Icon(Icons.Default.Search, null) },
+                                trailingIcon = {
+                                    IconButton(onClick = {
+                                        viewModel.setSearchQuery("")
+                                        searchOpen = false
+                                    }) { Icon(Icons.Default.Close, "بستن جستجو") }
+                                },
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                        },
+                        navigationIcon = {}
+                    )
+                } else {
+                    TopAppBar(
+                        title = {
+                            Column {
+                                Text("eiNote", fontWeight = FontWeight.Bold)
+                                Text(
+                                    when (tab) { 1 -> "حساب‌کتاب شخصی"; 2 -> "برنامه‌ریزی شخصی"; else -> "دفتر شخصی" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
+                        navigationIcon = {
+                            if (isPhone) IconButton(onClick = { moreOpen = true }) { Icon(Icons.Default.Menu, "منوی بیشتر") }
+                        },
+                        actions = {
+                            if (tab == 0) {
+                                IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
+                                IconButton(onClick = { filtersOpen = true }) { Icon(Icons.Default.FilterList, "فیلترها") }
+                            }
+                            if (!isPhone) {
+                                IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
+                                IconButton(onClick = onSecurity) { Icon(Icons.Default.Lock, "امنیت") }
+                                IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "تنظیمات") }
+                            } else {
+                                DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                                    DropdownMenuItem(text = { Text("پشتیبان") }, leadingIcon = { Icon(Icons.Default.SettingsBackupRestore, null) }, onClick = { moreOpen = false; onBackup() })
+                                    DropdownMenuItem(text = { Text("امنیت") }, leadingIcon = { Icon(Icons.Default.Lock, null) }, onClick = { moreOpen = false; onSecurity() })
+                                    DropdownMenuItem(text = { Text("تنظیمات") }, leadingIcon = { Icon(Icons.Default.Settings, null) }, onClick = { moreOpen = false; onSettings() })
+                                }
+                            }
                         }
-                    }
+                    )
                 }
-            )
+            }
         },
         floatingActionButton = {
             when (tab) {
@@ -634,10 +734,6 @@ private fun HomeScreen(
         }
     }
 
-    if (searchOpen && tab == 0) {
-        // جستجو در همان صفحه؛ نوار بالا با حالت مینیمال جایگزین می‌شود.
-        LaunchedEffect(Unit) { }
-    }
     if (filtersOpen) {
         NoteFiltersDialog(
             pinnedOnly = pinnedOnly, archivedOnly = archivedOnly, selectedTag = selectedTag,
@@ -659,26 +755,38 @@ private fun EiNoteSectionTabs(selected: Int, onSelected: (Int) -> Unit) {
     Surface(
         Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.52f)
     ) {
         Row(Modifier.fillMaxWidth().padding(5.dp)) {
             items.forEachIndexed { index, item ->
                 val active = selected == index
+                val elevation by animateDpAsState(if (active) 3.dp else 0.dp, label = "tab_elevation")
+                val iconScale by animateFloatAsState(if (active) 1.08f else 1f, label = "tab_icon_scale")
                 Surface(
                     onClick = { onSelected(index) },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(18.dp),
                     color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
-                    tonalElevation = if (active) 2.dp else 0.dp
+                    tonalElevation = elevation
                 ) {
                     Row(
                         Modifier.padding(vertical = 11.dp, horizontal = 4.dp),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
                     ) {
-                        Icon(item.second, null, Modifier.size(19.dp), tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(
+                            item.second,
+                            null,
+                            Modifier.size(19.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
+                            tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Spacer(Modifier.width(5.dp))
-                        Text(item.first, maxLines = 1, style = MaterialTheme.typography.labelLarge, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
+                        Text(
+                            item.first,
+                            maxLines = 1,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -758,7 +866,7 @@ private fun FinanceEmptyState(onOpen: () -> Unit) {
 private fun PlannerHero(total: Int, completed: Int) {
     val progress = if (total == 0) 0f else completed.toFloat() / total
     Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(26.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
-        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(dashboardSpacing)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column {
                     Text("برنامه امروز", style = MaterialTheme.typography.labelLarge)
@@ -895,17 +1003,40 @@ private fun NoteFiltersDialog(
 private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
     val busy by viewModel.busy.collectAsState()
     val message by viewModel.message.collectAsState()
+    val info by viewModel.info.collectAsState()
+    var selectedRestoreUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var secureExportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var secureExportDialog by remember { mutableStateOf(false) }
+    var secureImportUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    var securePassword by remember { mutableStateOf("") }
+    var securePasswordConfirm by remember { mutableStateOf("") }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
-    ) { uri ->
-        uri?.let { viewModel.export(it) }
-    }
+    ) { uri -> uri?.let { viewModel.export(it) } }
+
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        uri?.let { viewModel.import(it) }
+        selectedRestoreUri = uri
+        uri?.let { viewModel.inspect(it) }
     }
-    var confirmRestore by remember { mutableStateOf(false) }
+    val secureExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        secureExportUri = uri
+        if (uri != null) {
+            securePassword = ""
+            securePasswordConfirm = ""
+            secureExportDialog = true
+        }
+    }
+    val secureImportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        secureImportUri = uri
+        if (uri != null) securePassword = ""
+    }
 
     BackHandler { if (!busy) onBack() }
 
@@ -921,76 +1052,281 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
             )
         }
     ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).padding(20.dp),
+        LazyColumn(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("پشتیبان کامل دفتر", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("یادداشت‌ها، چک‌لیست‌ها، برنامه‌ریزی، یادآوری‌ها، دخل‌وخرج و همه عکس‌ها، فایل‌ها و صداها در یک فایل آفلاین ذخیره می‌شوند.")
-                    Text("فرمت پشتیبان نسخه‌دار است و قبل از بازیابی، ساختار و ارتباط داده‌ها بررسی می‌شود.")
+            item {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Icon(
+                                    Icons.Default.CloudDone,
+                                    contentDescription = null,
+                                    modifier = Modifier.padding(12.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text("دفتر همیشه قابل برگشت است", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                                Text("یک نسخه آفلاین از اطلاعاتت بساز.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Text(
+                            "یادداشت‌ها، بلوک‌ها، برنامه‌ریزی، دخل‌وخرج، یادآوری‌ها و فایل‌های پیوست در یک پشتیبان نسخه‌دار ذخیره می‌شوند.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
 
-            Button(
-                onClick = {
-                    val current = PersianFormat.currentJalali()
-                    val date = "${current.first}-${current.second}-${current.third}"
-                    exportLauncher.launch("eiNote-backup-" + date + ".einote")
-                },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Backup, null)
-                Spacer(Modifier.width(8.dp))
-                Text("ساخت پشتیبان")
+            item {
+                Button(
+                    onClick = {
+                        val current = PersianFormat.currentJalali()
+                        val date = current.first.toString() + "-" + current.second + "-" + current.third
+                        exportLauncher.launch("eiNote-backup-" + date + ".einote")
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Backup, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("ساخت پشتیبان جدید")
+                }
             }
 
-            OutlinedButton(
-                onClick = { confirmRestore = true },
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Restore, null)
-                Spacer(Modifier.width(8.dp))
-                Text("بازیابی پشتیبان")
+            item {
+                OutlinedButton(
+                    onClick = {
+                        securePassword = ""
+                        securePasswordConfirm = ""
+                        secureExportLauncher.launch("eiNote-secure-backup.einote.secure")
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Lock, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("ساخت پشتیبان رمزگذاری‌شده")
+                }
+            }
+
+            item {
+                TextButton(
+                    onClick = {
+                        securePassword = ""
+                        secureImportLauncher.launch(arrayOf("application/octet-stream", "application/*"))
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.LockOpen, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("بازیابی پشتیبان رمزگذاری‌شده")
+                }
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = {
+                        selectedRestoreUri = null
+                        viewModel.clearInfo()
+                        importLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/*"))
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Icon(Icons.Default.Restore, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("انتخاب پشتیبان برای بازیابی")
+                }
             }
 
             if (busy) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-                Text("در حال انجام عملیات…")
-            }
-
-            message?.let {
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-                    Text(it, Modifier.padding(14.dp))
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LinearProgressIndicator(Modifier.fillMaxWidth())
+                        Text("در حال بررسی پشتیبان…", style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
 
-            Spacer(Modifier.weight(1f))
-            Text(
-                "نکته: بازیابی، دفتر فعلی را با نسخه داخل پشتیبان جایگزین می‌کند. اگر فایل خراب یا ناسازگار باشد، بازیابی متوقف می‌شود.",
-                style = MaterialTheme.typography.bodySmall
-            )
+            info?.let { backup ->
+                item {
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Icon(Icons.Default.Verified, null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(8.dp))
+                                Text("پشتیبان معتبر است", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            }
+                            Text(
+                                "ساختار نسخه " + backup.schemaVersion + " با ای‌نوت سازگار است و ساختار فایل قبل از بازیابی بررسی شده.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                BackupStat("یادداشت", backup.notesCount, Modifier.weight(1f))
+                                BackupStat("بلوک", backup.blocksCount, Modifier.weight(1f))
+                            }
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                BackupStat("تراکنش", backup.financeCount, Modifier.weight(1f))
+                                BackupStat("پیوست", backup.attachmentsCount, Modifier.weight(1f))
+                            }
+                            Text(
+                                "بازیابی جایگزین کامل است؛ بهتر است قبل از ادامه یک پشتیبان از دفتر فعلی هم داشته باشی.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+
+            message?.let { msg ->
+                item {
+                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                        Text(msg, Modifier.padding(14.dp))
+                    }
+                }
+            }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "بازیابی به‌صورت تراکنشی انجام می‌شود؛ اگر داده‌ها یا فایل‌های پشتیبان ناسالم باشند، عملیات متوقف می‌شود.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 
-    if (confirmRestore) {
+    if (secureExportDialog) {
         AlertDialog(
-            onDismissRequest = { if (!busy) confirmRestore = false },
-            title = { Text("بازیابی پشتیبان؟") },
-            text = { Text("اطلاعات فعلی این دفتر با اطلاعات موجود در پشتیبان جایگزین می‌شود. قبل از ادامه مطمئن شو که پشتیبان درست را انتخاب می‌کنی.") },
+            onDismissRequest = { if (!busy) secureExportDialog = false },
+            title = { Text("رمزگذاری پشتیبان") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("رمز حداقل ۸ کاراکتری انتخاب کن. این رمز در ای‌نوت ذخیره نمی‌شود.")
+                    OutlinedTextField(
+                        value = securePassword,
+                        onValueChange = { securePassword = it },
+                        singleLine = true,
+                        label = { Text("رمز پشتیبان") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                    OutlinedTextField(
+                        value = securePasswordConfirm,
+                        onValueChange = { securePasswordConfirm = it },
+                        singleLine = true,
+                        label = { Text("تکرار رمز") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    confirmRestore = false
-                    importLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/*"))
-                }) { Text("ادامه") }
+                TextButton(
+                    enabled = securePassword.length >= 8 && securePassword == securePasswordConfirm && secureExportUri != null && !busy,
+                    onClick = {
+                        val uri = secureExportUri
+                        secureExportDialog = false
+                        if (uri != null) viewModel.exportEncrypted(uri, securePassword.toCharArray())
+                        securePassword = ""
+                        securePasswordConfirm = ""
+                    }
+                ) { Text("ساخت") }
             },
             dismissButton = {
-                TextButton(onClick = { confirmRestore = false }) { Text("انصراف") }
+                TextButton(onClick = { secureExportDialog = false; secureExportUri = null }) { Text("انصراف") }
             }
         )
+    }
+
+    if (secureImportUri != null) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) secureImportUri = null },
+            title = { Text("بازیابی پشتیبان رمزگذاری‌شده") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("رمز همان پشتیبانی را وارد کن. رمز روی دستگاه ذخیره نمی‌شود.")
+                    OutlinedTextField(
+                        value = securePassword,
+                        onValueChange = { securePassword = it },
+                        singleLine = true,
+                        label = { Text("رمز پشتیبان") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = securePassword.length >= 8 && !busy,
+                    onClick = {
+                        val uri = secureImportUri
+                        secureImportUri = null
+                        if (uri != null) viewModel.importEncrypted(uri, securePassword.toCharArray())
+                        securePassword = ""
+                    }
+                ) { Text("بازیابی") }
+            },
+            dismissButton = { TextButton(onClick = { secureImportUri = null }) { Text("انصراف") } }
+        )
+    }
+
+    if (info != null && selectedRestoreUri != null) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) { selectedRestoreUri = null; viewModel.clearInfo() } },
+            title = { Text("بازیابی این پشتیبان؟") },
+            text = {
+                Text(
+                    "این عملیات اطلاعات فعلی دفتر را با " + info!!.notesCount + " یادداشت، " +
+                        info!!.blocksCount + " بلوک و " + info!!.financeCount + " تراکنش جایگزین می‌کند. برای ادامه تأیید کن."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val uri = selectedRestoreUri
+                        selectedRestoreUri = null
+                        viewModel.clearInfo()
+                        if (uri != null) viewModel.import(uri)
+                    }
+                ) { Text("بازیابی") }
+            },
+            dismissButton = {
+                TextButton(onClick = { selectedRestoreUri = null; viewModel.clearInfo() }) {
+                    Text("انصراف")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun BackupStat(label: String, value: Int, modifier: Modifier = Modifier) {
+    Surface(
+        modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+    ) {
+        Column(Modifier.padding(14.dp)) {
+            Text(value.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -1593,17 +1929,14 @@ private fun DraggableBlockEditor(
     var dragOffset by remember(block.id) { mutableFloatStateOf(0f) }
     val currentIndex = remember { mutableIntStateOf(index) }
 
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
                 translationY = if (dragOffset != 0f) dragOffset else 0f
                 shadowElevation = if (dragOffset != 0f) 18f else 0f
             },
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+        color = Color.Transparent
     ) {
         Row(Modifier.fillMaxWidth()) {
             Box(
@@ -1677,6 +2010,7 @@ private fun DraggableBlockEditor(
     }
 }
 
+
 @Composable
 private fun StyledBlockEditor(
     block: NoteBlockEntity,
@@ -1685,7 +2019,7 @@ private fun StyledBlockEditor(
     onDeleteAudio: () -> Unit,
     onReminderScheduled: () -> Unit
 ) {
-    var value by remember(block.id, block.content) { mutableStateOf(block.content) }
+    var value by remember(block.id) { mutableStateOf(richTextToFieldValue(block.content)) }
     var checked by remember(block.id, block.checked) { mutableStateOf(block.checked) }
     var showTools by remember(block.id) { mutableStateOf(false) }
     val context = LocalContext.current
@@ -1694,84 +2028,65 @@ private fun StyledBlockEditor(
 
     if (block.type == BlockType.AUDIO.name || block.type == BlockType.IMAGE.name) {
         if (attachment != null) {
-            if (block.type == BlockType.AUDIO.name) {
-                AudioBlockEditor(
-                    attachment = attachment,
-                    onDelete = onDeleteAudio
-                )
-            } else {
-                ImageBlockEditor(
-                    attachment = attachment,
-                    onDelete = onDeleteAudio
-                )
-            }
+            if (block.type == BlockType.AUDIO.name) AudioBlockEditor(attachment, onDeleteAudio)
+            else ImageBlockEditor(attachment, onDeleteAudio)
         } else {
-            Card(
-                Modifier.fillMaxWidth().padding(12.dp),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(14.dp),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Icon(
-                        if (block.type == BlockType.IMAGE.name) Icons.Default.Image else Icons.Default.GraphicEq,
-                        null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
+            Card(Modifier.fillMaxWidth().padding(12.dp), shape = RoundedCornerShape(18.dp)) {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Icon(if (block.type == BlockType.IMAGE.name) Icons.Default.Image else Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(10.dp))
-                    Text(
-                        if (block.type == BlockType.IMAGE.name) "فایل تصویری پیدا نشد" else "فایل صوتی پیدا نشد",
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    IconButton(onClick = onDeleteAudio) {
-                        Icon(Icons.Default.DeleteOutline, "حذف بلوک صوتی")
-                    }
+                    Text(if (block.type == BlockType.IMAGE.name) "فایل تصویری پیدا نشد" else "فایل صوتی پیدا نشد", Modifier.weight(1f), color = MaterialTheme.colorScheme.error)
+                    IconButton(onClick = onDeleteAudio) { Icon(Icons.Default.DeleteOutline, "حذف بلوک") }
                 }
             }
         }
         return
     }
 
-    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             Text(
                 when (block.type) {
                     BlockType.CHECKLIST.name -> "چک‌لیست"
                     BlockType.BULLET.name -> "فهرست"
                     else -> "متن"
                 },
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
             )
-            IconButton(onClick = { showTools = !showTools }) {
-                Icon(Icons.Default.Tune, "قالب‌بندی")
+            IconButton(onClick = { showTools = !showTools }, modifier = Modifier.size(34.dp)) {
+                Icon(if (showTools) Icons.Default.ExpandLess else Icons.Default.Tune, "قالب‌بندی")
             }
-            IconButton(onClick = { viewModel.deleteBlock(block) }) {
+            IconButton(onClick = { viewModel.deleteBlock(block) }, modifier = Modifier.size(34.dp)) {
                 Icon(Icons.Default.DeleteOutline, "حذف")
             }
         }
 
         if (showTools) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-            ) {
-                Text("اندازه", style = MaterialTheme.typography.labelMedium)
-                Slider(
-                    value = size,
-                    onValueChange = { viewModel.updateBlock(block.copy(textSizeSp = it)) },
-                    valueRange = 13f..32f,
-                    modifier = Modifier.weight(1f)
-                )
+            RichTextToolbar(
+                value = value,
+                alignment = block.alignment,
+                onToggleBold = {
+                    value = toggleInlineStyle(value, InlineStyle.BOLD)
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(value)))
+                },
+                onToggleItalic = {
+                    value = toggleInlineStyle(value, InlineStyle.ITALIC)
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(value)))
+                },
+                onToggleUnderline = {
+                    value = toggleInlineStyle(value, InlineStyle.UNDERLINE)
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(value)))
+                },
+                onAlignment = { viewModel.updateBlock(block.copy(alignment = it)) }
+            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text("اندازه", style = MaterialTheme.typography.labelSmall)
+                Slider(value = size, onValueChange = { viewModel.updateBlock(block.copy(textSizeSp = it)) }, valueRange = 13f..32f, modifier = Modifier.weight(1f))
                 Text(PersianFormat.digits(size.toInt().toLong()), style = MaterialTheme.typography.labelSmall)
             }
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(
                     MaterialTheme.colorScheme.onSurface,
                     MaterialTheme.colorScheme.primary,
@@ -1781,61 +2096,47 @@ private fun StyledBlockEditor(
                     Color(0xFFF59E0B)
                 ).forEach { color ->
                     Box(
-                        Modifier
-                            .size(28.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
-                            .background(color)
-                            .clickable {
-                                viewModel.updateBlock(block.copy(textColor = color.value.toLong()))
-                            }
+                        Modifier.size(26.dp).clip(androidx.compose.foundation.shape.CircleShape).background(color).clickable {
+                            viewModel.updateBlock(block.copy(textColor = color.value.toLong()))
+                        }
                     )
                 }
             }
         }
 
+        val editor: @Composable (Modifier) -> Unit = { modifier ->
+            RichEditorField(
+                value = value,
+                onValueChange = {
+                    value = it
+                    viewModel.updateBlock(block.copy(content = fieldValueToHtml(it)))
+                },
+                textColor = textColor,
+                size = size,
+                alignment = block.alignment,
+                placeholder = if (block.type == BlockType.BULLET.name) "آیتم فهرست…" else if (block.type == BlockType.CHECKLIST.name) "یک کار بنویس…" else "اینجا بنویس…",
+                modifier = modifier
+            )
+        }
+
         if (block.type == BlockType.CHECKLIST.name) {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
                 Checkbox(
                     checked = checked,
                     onCheckedChange = {
                         checked = it
-                        viewModel.updateBlock(
-                            block.copy(
-                                checked = it,
-                                completedAt = if (it) System.currentTimeMillis() else null
-                            )
-                        )
+                        viewModel.updateBlock(block.copy(checked = it, completedAt = if (it) System.currentTimeMillis() else null))
                         if (it) viewModel.cancelReminder(block.id)
                     }
                 )
-                BasicEditorField(
-                    value = value,
-                    onValueChange = {
-                        value = it
-                        viewModel.updateBlock(block.copy(content = it))
-                    },
-                    textColor = textColor,
-                    size = size,
-                    placeholder = "یک کار بنویس…",
-                    modifier = Modifier.weight(1f)
-                )
+                editor(Modifier.weight(1f))
             }
         } else {
-            Row(verticalAlignment = androidx.compose.ui.Alignment.Top) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.Top) {
                 if (block.type == BlockType.BULLET.name) {
                     Text("•", fontSize = size.sp, color = textColor, modifier = Modifier.padding(top = 8.dp, end = 8.dp))
                 }
-                BasicEditorField(
-                    value = value,
-                    onValueChange = {
-                        value = it
-                        viewModel.updateBlock(block.copy(content = it))
-                    },
-                    textColor = textColor,
-                    size = size,
-                    placeholder = if (block.type == BlockType.BULLET.name) "آیتم فهرست…" else "اینجا بنویس…",
-                    modifier = Modifier.weight(1f)
-                )
+                editor(Modifier.weight(1f))
             }
         }
 
@@ -1864,37 +2165,199 @@ private fun StyledBlockEditor(
     }
 }
 
+private enum class InlineStyle { BOLD, ITALIC, UNDERLINE }
+
 @Composable
-private fun BasicEditorField(
-    value: String,
-    onValueChange: (String) -> Unit,
+private fun RichTextToolbar(
+    value: TextFieldValue,
+    alignment: String,
+    onToggleBold: () -> Unit,
+    onToggleItalic: () -> Unit,
+    onToggleUnderline: () -> Unit,
+    onAlignment: (String) -> Unit
+) {
+    val hasSelection = value.selection.start != value.selection.end
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 4.dp, vertical = 2.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+    ) {
+        RichFormatButton("B", hasSelection && rangeHasInlineStyle(value.annotatedString, value.selection, InlineStyle.BOLD), onToggleBold)
+        RichFormatButton("I", hasSelection && rangeHasInlineStyle(value.annotatedString, value.selection, InlineStyle.ITALIC), onToggleItalic, italic = true)
+        RichFormatButton("U", hasSelection && rangeHasInlineStyle(value.annotatedString, value.selection, InlineStyle.UNDERLINE), onToggleUnderline, underline = true)
+        VerticalDivider(Modifier.height(24.dp).width(1.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        AlignmentButton(Icons.Default.FormatAlignRight, "راست‌چین", alignment == "right") { onAlignment("right") }
+        AlignmentButton(Icons.Default.FormatAlignCenter, "وسط‌چین", alignment == "center") { onAlignment("center") }
+        AlignmentButton(Icons.Default.FormatAlignLeft, "چپ‌چین", alignment == "left") { onAlignment("left") }
+        AlignmentButton(Icons.Default.FormatTextdirectionRToL, "خودکار", alignment == "auto") { onAlignment("auto") }
+    }
+}
+
+@Composable
+private fun RichFormatButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    italic: Boolean = false,
+    underline: Boolean = false
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(9.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+    ) {
+        Text(
+            label,
+            Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            fontWeight = if (label == "B") FontWeight.Bold else FontWeight.Medium,
+            fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
+            textDecoration = if (underline) TextDecoration.Underline else TextDecoration.None
+        )
+    }
+}
+
+@Composable
+private fun AlignmentButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Icon(icon, description, tint = if (selected) MaterialTheme.colorScheme.primary else LocalContentColor.current)
+    }
+}
+
+@Composable
+private fun RichEditorField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     textColor: Color,
     size: Float,
+    alignment: String,
     placeholder: String,
     modifier: Modifier
 ) {
+    val align = when (alignment) {
+        "left" -> TextAlign.Left
+        "center" -> TextAlign.Center
+        "right" -> TextAlign.Right
+        else -> TextAlign.Start
+    }
     androidx.compose.foundation.text.BasicTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 110.dp),
-        textStyle = androidx.compose.ui.text.TextStyle(
+        modifier = modifier.fillMaxWidth().heightIn(min = 86.dp),
+        textStyle = TextStyle(
             color = textColor,
             fontSize = size.sp,
-            lineHeight = (size * 1.55f).sp
+            lineHeight = (size * 1.55f).sp,
+            textAlign = align,
+            textDirection = TextDirection.Content
         ),
         decorationBox = { inner ->
-            if (value.isBlank()) {
-                Text(
-                    placeholder,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                    fontSize = size.sp
-                )
+            if (value.text.isBlank()) {
+                Text(placeholder, Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f), fontSize = size.sp, textAlign = align)
             }
             inner()
         }
     )
+}
+
+private fun richTextToFieldValue(content: String): TextFieldValue {
+    if (content.isBlank()) return TextFieldValue("")
+    if (!content.trimStart().startsWith("<")) return TextFieldValue(content)
+    return runCatching {
+        TextFieldValue(spannedToAnnotatedString(HtmlCompat.fromHtml(content, HtmlCompat.FROM_HTML_MODE_LEGACY)))
+    }.getOrElse { TextFieldValue(content) }
+}
+
+private fun spannedToAnnotatedString(spanned: Spanned): AnnotatedString {
+    val builder = AnnotatedString.Builder(spanned.toString())
+    spanned.getSpans(0, spanned.length, Any::class.java).forEach { span ->
+        val start = spanned.getSpanStart(span).coerceAtLeast(0)
+        val end = spanned.getSpanEnd(span).coerceAtMost(spanned.length)
+        if (start >= end) return@forEach
+        when (span) {
+            is StyleSpan -> when (span.style) {
+                android.graphics.Typeface.BOLD -> builder.addStyle(SpanStyle(fontWeight = FontWeight.Bold), start, end)
+                android.graphics.Typeface.ITALIC -> builder.addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
+                android.graphics.Typeface.BOLD_ITALIC -> builder.addStyle(SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic), start, end)
+            }
+            is UnderlineSpan -> builder.addStyle(SpanStyle(textDecoration = TextDecoration.Underline), start, end)
+            is StrikethroughSpan -> builder.addStyle(SpanStyle(textDecoration = TextDecoration.LineThrough), start, end)
+            is ForegroundColorSpan -> builder.addStyle(SpanStyle(color = Color(span.foregroundColor)), start, end)
+        }
+    }
+    return builder.toAnnotatedString()
+}
+
+private fun fieldValueToHtml(value: TextFieldValue): String {
+    val annotated = value.annotatedString
+    if (annotated.text.isBlank()) return ""
+    val out = StringBuilder()
+    var i = 0
+    while (i < annotated.length) {
+        val styles = annotated.spanStyles.filter { it.start <= i && it.end > i }.map { it.item }
+        var end = i + 1
+        while (end < annotated.length) {
+            val next = annotated.spanStyles.filter { it.start <= end && it.end > end }.map { it.item }
+            if (next != styles) break
+            end++
+        }
+        var text = android.text.TextUtils.htmlEncode(annotated.text.substring(i, end)).replace("
+", "<br>")
+        val style = mergeSpanStyles(styles)
+        if (style.fontWeight == FontWeight.Bold) text = "<b>$text</b>"
+        if (style.fontStyle == FontStyle.Italic) text = "<i>$text</i>"
+        if (style.textDecoration?.contains(TextDecoration.Underline) == true) text = "<u>$text</u>"
+        if (style.textDecoration?.contains(TextDecoration.LineThrough) == true) text = "<s>$text</s>"
+        out.append(text)
+        i = end
+    }
+    return out.toString()
+}
+
+private fun mergeSpanStyles(styles: List<SpanStyle>): SpanStyle {
+    var result = SpanStyle()
+    styles.forEach { result = result.merge(it) }
+    return result
+}
+
+private fun rangeHasInlineStyle(annotated: AnnotatedString, selection: TextRange, style: InlineStyle): Boolean {
+    val start = minOf(selection.start, selection.end).coerceIn(0, annotated.length)
+    val end = maxOf(selection.start, selection.end).coerceIn(0, annotated.length)
+    if (start >= end) return false
+    for (i in start until end) {
+        val merged = mergeSpanStyles(annotated.spanStyles.filter { it.start <= i && it.end > i }.map { it.item })
+        val styled = when (style) {
+            InlineStyle.BOLD -> merged.fontWeight == FontWeight.Bold
+            InlineStyle.ITALIC -> merged.fontStyle == FontStyle.Italic
+            InlineStyle.UNDERLINE -> merged.textDecoration?.contains(TextDecoration.Underline) == true
+        }
+        if (!styled) return false
+    }
+    return true
+}
+
+private fun toggleInlineStyle(value: TextFieldValue, style: InlineStyle): TextFieldValue {
+    val start = minOf(value.selection.start, value.selection.end).coerceIn(0, value.text.length)
+    val end = maxOf(value.selection.start, value.selection.end).coerceIn(0, value.text.length)
+    if (start >= end) return value
+    val remove = rangeHasInlineStyle(value.annotatedString, value.selection, style)
+    val builder = AnnotatedString.Builder(value.annotatedString)
+    builder.addStyle(
+        when (style) {
+            InlineStyle.BOLD -> SpanStyle(fontWeight = if (remove) FontWeight.Normal else FontWeight.Bold)
+            InlineStyle.ITALIC -> SpanStyle(fontStyle = if (remove) FontStyle.Normal else FontStyle.Italic)
+            InlineStyle.UNDERLINE -> SpanStyle(textDecoration = if (remove) TextDecoration.None else TextDecoration.Underline)
+        },
+        start,
+        end
+    )
+    return value.copy(annotatedString = builder.toAnnotatedString())
 }
 
 @Composable

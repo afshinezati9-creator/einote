@@ -26,18 +26,65 @@ import java.util.zip.ZipOutputStream
 class BackupManager(private val context: Context) {
     companion object {
         const val FORMAT_VERSION = 1
-        private const val SCHEMA_VERSION = 7
+        private const val SCHEMA_VERSION = 8
         private const val MANIFEST = "manifest.json"
         private const val NOTES = "data/notes.json"
         private const val BLOCKS = "data/blocks.json"
         private const val FINANCE = "data/finance.json"
         private const val ATTACHMENTS = "data/attachments.json"
         private const val FILES_DIR = "files/"
+        private const val MAX_JSON_BYTES = 32 * 1024 * 1024
+        private const val MAX_ATTACHMENT_BYTES = 100L * 1024L * 1024L
+        private const val MAX_TOTAL_ATTACHMENT_BYTES = 512L * 1024L * 1024L
     }
 
     private val db = NoteDatabase.get(context)
 
     suspend fun exportTo(uri: Uri) {
+        context.contentResolver.openOutputStream(uri)?.use { output ->
+            writeBackupZip(output)
+        } ?: throw BackupException("محل ذخیره پشتیبان قابل دسترسی نیست.")
+    }
+
+    suspend fun exportEncryptedTo(uri: Uri, password: CharArray) {
+        val temp = File(context.cacheDir, "einote-plain-" + System.currentTimeMillis() + ".einote")
+        val encrypted = File(context.cacheDir, "einote-encrypted-" + System.currentTimeMillis() + ".bin")
+        try {
+            java.io.FileOutputStream(temp).use { writeBackupZip(it) }
+            BackupCrypto.encrypt(temp, encrypted, password)
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                FileInputStream(encrypted).use { input -> input.copyTo(output) }
+            } ?: throw BackupException("محل ذخیره پشتیبان قابل دسترسی نیست.")
+        } catch (e: IllegalArgumentException) {
+            throw BackupException(e.message ?: "رمز پشتیبان معتبر نیست.")
+        } catch (e: SecurityException) {
+            throw BackupException(e.message ?: "رمزگذاری پشتیبان انجام نشد.")
+        } finally {
+            temp.delete()
+            encrypted.delete()
+        }
+    }
+
+    suspend fun importEncryptedFrom(uri: Uri, password: CharArray) {
+        val encrypted = File(context.cacheDir, "einote-import-encrypted-" + System.currentTimeMillis() + ".bin")
+        val plain = File(context.cacheDir, "einote-import-plain-" + System.currentTimeMillis() + ".einote")
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(encrypted).use { output -> input.copyTo(output) }
+            } ?: throw BackupException("فایل پشتیبان قابل خواندن نیست.")
+            try {
+                BackupCrypto.decrypt(encrypted, plain, password)
+            } catch (e: SecurityException) {
+                throw BackupException(e.message ?: "رمز پشتیبان اشتباه است.")
+            }
+            importFrom(android.net.Uri.fromFile(plain))
+        } finally {
+            encrypted.delete()
+            plain.delete()
+        }
+    }
+
+    private suspend fun writeBackupZip(output: java.io.OutputStream) {
         val notes = db.noteDao().getAll()
         val blocks = db.noteBlockDao().getAll()
         val finance = db.financeTransactionDao().getAll()
@@ -49,22 +96,34 @@ class BackupManager(private val context: Context) {
             }
         }
 
-        context.contentResolver.openOutputStream(uri)?.use { output ->
-            ZipOutputStream(BufferedOutputStream(output)).use { zip ->
-                putText(zip, MANIFEST, manifestJson(notes.size, blocks.size, finance.size, attachments.size))
-                putText(zip, NOTES, notesJson(notes))
-                putText(zip, BLOCKS, blocksJson(blocks))
-                putText(zip, FINANCE, financeJson(finance))
-                putText(zip, ATTACHMENTS, attachmentsJson(attachments))
+        ZipOutputStream(BufferedOutputStream(output)).use { zip ->
+            putText(zip, MANIFEST, manifestJson(notes.size, blocks.size, finance.size, attachments.size))
+            putText(zip, NOTES, notesJson(notes))
+            putText(zip, BLOCKS, blocksJson(blocks))
+            putText(zip, FINANCE, financeJson(finance))
+            putText(zip, ATTACHMENTS, attachmentsJson(attachments))
 
-                attachments.forEach { attachment ->
-                    val file = File(attachment.localPath)
-                    zip.putNextEntry(ZipEntry(FILES_DIR + attachment.id + ".bin"))
-                    FileInputStream(file).use { input -> input.copyTo(zip) }
-                    zip.closeEntry()
-                }
+            attachments.forEach { attachment ->
+                val file = File(attachment.localPath)
+                zip.putNextEntry(ZipEntry(FILES_DIR + attachment.id + ".bin"))
+                FileInputStream(file).use { input -> input.copyTo(zip) }
+                zip.closeEntry()
             }
-        } ?: throw BackupException("محل ذخیره پشتیبان قابل دسترسی نیست.")
+        }
+    }
+
+    suspend fun inspect(uri: Uri): BackupInfo {
+        val manifestText = readZipText(uri, MANIFEST, 1024 * 1024)
+        val manifest = parseManifest(manifestText)
+        validateManifest(manifest)
+        return BackupInfo(
+            createdAt = manifest.createdAt,
+            schemaVersion = manifest.schemaVersion,
+            notesCount = manifest.notesCount,
+            blocksCount = manifest.blocksCount,
+            financeCount = manifest.financeCount,
+            attachmentsCount = manifest.attachmentsCount
+        )
     }
 
     suspend fun importFrom(uri: Uri) {
@@ -110,6 +169,7 @@ class BackupManager(private val context: Context) {
             } ?: throw BackupException("فایل پشتیبان قابل خواندن نیست.")
 
             val manifest = parseManifest(requireText(manifestText, MANIFEST))
+            validateManifest(manifest)
             val notes = parseNotes(requireText(notesText, NOTES))
             val blocks = parseBlocks(requireText(blocksText, BLOCKS))
             val finance = parseFinance(requireText(financeText, FINANCE))
@@ -119,6 +179,7 @@ class BackupManager(private val context: Context) {
 
             val attachmentsDir = File(context.filesDir, "attachments").apply { mkdirs() }
             val copiedFiles = mutableListOf<File>()
+            var copiedBytes = 0L
             val restoredAttachments = attachmentRecords.map { record ->
                 val source = File(extracted, record.id.toString() + ".bin")
                 val target = File(
@@ -258,6 +319,7 @@ class BackupManager(private val context: Context) {
                 .put("completedAt", it.completedAt ?: JSONObject.NULL)
                 .put("textColor", it.textColor)
                 .put("textSizeSp", it.textSizeSp)
+                .put("alignment", it.alignment)
                 .put("createdAt", it.createdAt)
                 .put("updatedAt", it.updatedAt))
         }
@@ -296,8 +358,32 @@ class BackupManager(private val context: Context) {
             it.getInt("notesCount"),
             it.getInt("blocksCount"),
             it.getInt("financeCount"),
-            it.getInt("attachmentsCount")
+            it.getInt("attachmentsCount"),
+            it.optLong("createdAt", 0L)
         )
+    }
+
+    private fun validateManifest(manifest: Manifest) {
+        if (manifest.formatVersion != FORMAT_VERSION) throw BackupException("نسخه پشتیبان پشتیبانی نمی‌شود.")
+        if (manifest.schemaVersion !in 6..SCHEMA_VERSION) throw BackupException("نسخه ساختار داده این پشتیبان با این نسخه ای‌نوت سازگار نیست.")
+        if (manifest.createdAt <= 0L) throw BackupException("زمان ایجاد پشتیبان معتبر نیست.")
+        if (manifest.notesCount < 0 || manifest.blocksCount < 0 || manifest.financeCount < 0 || manifest.attachmentsCount < 0) {
+            throw BackupException("اطلاعات آماری پشتیبان معتبر نیست.")
+        }
+    }
+
+    private suspend fun readZipText(uri: Uri, targetName: String, maxBytes: Int): String {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            ZipInputStream(BufferedInputStream(input)).use { zip ->
+                var entry = zip.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory && entry.name == targetName) return zip.readUtf8Limited(maxBytes)
+                    zip.closeEntry()
+                    entry = zip.nextEntry
+                }
+            }
+        } ?: throw BackupException("فایل پشتیبان قابل خواندن نیست.")
+        throw BackupException("بخش «" + targetName + "» در پشتیبان وجود ندارد.")
     }
 
     private fun parseNotes(text: String): List<NoteEntity> = JSONArray(text).let { array ->
@@ -334,6 +420,7 @@ class BackupManager(private val context: Context) {
                     it.optNullableLong("completedAt"),
                     it.optLong("textColor", 0L),
                     it.optDouble("textSizeSp", 17.0).toFloat(),
+                    it.optString("alignment", "auto"),
                     it.getLong("createdAt"),
                     it.getLong("updatedAt")
                 )

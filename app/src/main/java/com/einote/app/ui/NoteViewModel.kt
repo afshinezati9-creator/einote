@@ -16,6 +16,9 @@ import com.einote.app.data.NoteEntity
 import com.einote.app.data.NoteRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
@@ -35,6 +38,16 @@ class NoteViewModel(application: Application) : AndroidViewModel(application) {
     @OptIn(ExperimentalCoroutinesApi::class)
     val notes = kotlinx.coroutines.flow.combine(query, space) { q, s -> q to s }
         .flatMapLatest { (q, s) -> repository.observeNotes(q, s) }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val tagSources = space.flatMapLatest { repository.observeTagSources(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val allTags = tagSources.map { sources ->
+        sources.flatMap { raw ->
+            raw.split(',', '،').map { it.trim() }.filter { it.isNotBlank() }
+        }.distinctBy { normalize(it) }.sorted()
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val pinnedOnly = MutableStateFlow(false)
     val pinnedOnlyFilter: StateFlow<Boolean> = pinnedOnly.asStateFlow()
