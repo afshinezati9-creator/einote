@@ -40,5 +40,9 @@ class NoteRepository(
         blockDao.update(block.copy(updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun updateBlockPosition(id: Long, position: Int) {
+        blockDao.updatePosition(id, position, System.currentTimeMillis())
+    }
+
     suspend fun deleteBlock(block: NoteBlockEntity) = blockDao.delete(block)
 }
