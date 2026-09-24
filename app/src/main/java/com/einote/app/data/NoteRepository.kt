@@ -4,16 +4,19 @@ import kotlinx.coroutines.flow.Flow
 
 class NoteRepository(
     private val dao: NoteDao,
-    private val blockDao: NoteBlockDao
+    private val blockDao: NoteBlockDao,
+    private val attachmentDao: AttachmentDao
 ) {
     fun observeNotes(query: String): Flow<List<NoteEntity>> = dao.observeNotes(query)
     suspend fun getById(id: Long): NoteEntity? = dao.getById(id)
     fun observeBlocks(noteId: Long): Flow<List<NoteBlockEntity>> = blockDao.observeForNote(noteId)
     fun observePlannedBlocks(): Flow<List<NoteBlockEntity>> = blockDao.observePlanned()
+    fun observeAttachments(noteId: Long): Flow<List<AttachmentEntity>> = attachmentDao.observeForNote(noteId)
     suspend fun insert(note: NoteEntity): Long = dao.insert(note)
     suspend fun update(note: NoteEntity) = dao.update(note)
 
     suspend fun delete(note: NoteEntity) {
+        attachmentDao.deleteForNote(note.id)
         blockDao.deleteForNote(note.id)
         dao.delete(note)
     }
@@ -23,8 +26,8 @@ class NoteRepository(
 
     suspend fun archive(id: Long) = dao.archive(id, System.currentTimeMillis())
 
-    suspend fun addBlock(noteId: Long, type: BlockType, content: String = ""): Long {
-        return blockDao.insert(
+    suspend fun addBlock(noteId: Long, type: BlockType, content: String = ""): Long =
+        blockDao.insert(
             NoteBlockEntity(
                 noteId = noteId,
                 type = type.name,
@@ -32,7 +35,6 @@ class NoteRepository(
                 position = blockDao.nextPosition(noteId)
             )
         )
-    }
 
     suspend fun updateBlock(block: NoteBlockEntity) {
         blockDao.update(block.copy(updatedAt = System.currentTimeMillis()))
