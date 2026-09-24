@@ -20,8 +20,17 @@ interface NoteBlockDao {
     """)
     fun observePlanned(): Flow<List<NoteBlockEntity>>
 
+    @Query("SELECT * FROM note_blocks ORDER BY id ASC")
+    suspend fun getAll(): List<NoteBlockEntity>
+
+    @Query("DELETE FROM note_blocks")
+    suspend fun deleteAll()
+
     @Insert
     suspend fun insert(block: NoteBlockEntity): Long
+
+    @Insert
+    suspend fun insertAll(blocks: List<NoteBlockEntity>)
 
     @Update
     suspend fun update(block: NoteBlockEntity)
