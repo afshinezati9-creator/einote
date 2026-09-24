@@ -100,7 +100,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     val themeMode by settingsViewModel.themeMode.collectAsState()
     val accent by settingsViewModel.accent.collectAsState()
     val textScale by settingsViewModel.textScale.collectAsState()
-    val editorMode by settingsViewModel.editorMode.collectAsState()
+    val editorMode by settingsViewModel.editorMode.collectAsState()\n    val dashboardDensity by settingsViewModel.dashboardDensity.collectAsState()
 
     var editingId by remember { mutableStateOf<Long?>(null) }
     var plannerOpen by remember { mutableStateOf(false) }
@@ -180,7 +180,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
                 onFinance = { financeOpen = true },
                 onBackup = { backupOpen = true },
                 onSecurity = { securityOpen = true },
-                onSettings = { settingsOpen = true }
+                onSettings = { settingsOpen = true },\n                dashboardDensity = dashboardDensity
             )
         }
     }
@@ -273,6 +273,8 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
     val showArchived by viewModel.showArchived.collectAsState()
     val notifications by viewModel.notifications.collectAsState()
     val compactBlocks by viewModel.compactBlocks.collectAsState()
+    val dashboardDensity by viewModel.dashboardDensity.collectAsState()
+    val animations by viewModel.animations.collectAsState()
     val editorMode by viewModel.editorMode.collectAsState()
 
     BackHandler { onBack() }
@@ -289,7 +291,7 @@ private fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding).padding(horizontal = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(dashboardSpacing)
         ) {
             item {
                 Spacer(Modifier.height(10.dp))
@@ -528,7 +530,7 @@ private fun HomeScreen(
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var searchOpen by remember { mutableStateOf(false) }
     var filtersOpen by remember { mutableStateOf(false) }
-    var moreOpen by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }\n    val dashboardSpacing = when (dashboardDensity) {\n        SettingsManager.DASHBOARD_AIRY -> 18.dp\n        SettingsManager.DASHBOARD_COMPACT -> 8.dp\n        else -> 12.dp\n    }
 
     LaunchedEffect(Unit) { viewModel.setSpace("WRITING") }
 
