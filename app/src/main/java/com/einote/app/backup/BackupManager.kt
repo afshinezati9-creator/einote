@@ -2,6 +2,10 @@ package com.einote.app.backup
 
 import android.content.Context
 import android.net.Uri
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import com.einote.app.ReminderWorker
 import androidx.room.withTransaction
 import com.einote.app.data.AttachmentEntity
 import com.einote.app.data.FinanceTransactionEntity
@@ -39,6 +43,12 @@ class BackupManager(private val context: Context) {
         val finance = db.financeTransactionDao().getAll()
         val attachments = db.attachmentDao().getAll()
 
+        attachments.forEach { attachment ->
+            if (!File(attachment.localPath).isFile) {
+                throw BackupException("فایل پیوست «" + attachment.fileName + "» پیدا نشد.")
+            }
+        }
+
         context.contentResolver.openOutputStream(uri)?.use { output ->
             ZipOutputStream(BufferedOutputStream(output)).use { zip ->
                 putText(zip, MANIFEST, manifestJson(notes.size, blocks.size, finance.size, attachments.size))
@@ -49,9 +59,6 @@ class BackupManager(private val context: Context) {
 
                 attachments.forEach { attachment ->
                     val file = File(attachment.localPath)
-                    if (!file.isFile) {
-                        throw BackupException("فایل پیوست «" + attachment.fileName + "» پیدا نشد.")
-                    }
                     zip.putNextEntry(ZipEntry(FILES_DIR + attachment.id + ".bin"))
                     FileInputStream(file).use { input -> input.copyTo(zip) }
                     zip.closeEntry()
@@ -132,12 +139,31 @@ class BackupManager(private val context: Context) {
                     db.financeTransactionDao().insertAll(finance)
                     db.attachmentDao().insertAll(restoredAttachments)
                 }
+                scheduleRestoredReminders(blocks)
             } catch (e: Exception) {
                 copiedFiles.forEach { runCatching { it.delete() } }
                 throw BackupException("بازیابی انجام نشد؛ اطلاعات فعلی دست‌نخورده باقی ماند.", e)
             }
         } finally {
             tempRoot.deleteRecursively()
+        }
+    }
+
+
+    private fun scheduleRestoredReminders(blocks: List<NoteBlockEntity>) {
+        val workManager = WorkManager.getInstance(context)
+        blocks.forEach { block ->
+            val reminderAt = block.reminderAt ?: return@forEach
+            if (block.checked || reminderAt <= System.currentTimeMillis()) return@forEach
+            val request = OneTimeWorkRequestBuilder<ReminderWorker>()
+                .setInitialDelay(reminderAt - System.currentTimeMillis(), java.util.concurrent.TimeUnit.MILLISECONDS)
+                .setInputData(androidx.work.Data.Builder().putLong(ReminderWorker.KEY_BLOCK_ID, block.id).build())
+                .build()
+            workManager.enqueueUniqueWork(
+                ReminderWorker.WORK_PREFIX + block.id,
+                ExistingWorkPolicy.REPLACE,
+                request
+            )
         }
     }
 
