@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [NoteEntity::class, NoteBlockEntity::class, FinanceTransactionEntity::class, AttachmentEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class NoteDatabase : RoomDatabase() {
@@ -71,7 +71,19 @@ abstract class NoteDatabase : RoomDatabase() {
             }
         }
 
-        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE note_blocks ADD COLUMN textColor INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE note_blocks ADD COLUMN textSizeSp REAL NOT NULL DEFAULT 17.0")
+            }
+        }
+
+        internal val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_6
+        )
 
         fun get(context: Context): NoteDatabase =
             INSTANCE ?: synchronized(this) {
