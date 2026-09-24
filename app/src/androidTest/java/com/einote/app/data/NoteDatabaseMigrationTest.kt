@@ -1,6 +1,7 @@
 package com.einote.app.data
 
 import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import androidx.room.testing.MigrationTestHelper
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
@@ -40,7 +41,7 @@ class NoteDatabaseMigrationTest {
 
         database.insert(
             "notes",
-            SupportSQLiteDatabase.CONFLICT_NONE,
+            SQLiteDatabase.CONFLICT_NONE,
             android.content.ContentValues().apply {
                 put("id", 7L)
                 put("title", "قدیمی")
