@@ -33,6 +33,9 @@ class BackupManager(private val context: Context) {
         private const val FINANCE = "data/finance.json"
         private const val ATTACHMENTS = "data/attachments.json"
         private const val FILES_DIR = "files/"
+        private const val MAX_JSON_BYTES = 32 * 1024 * 1024
+        private const val MAX_ATTACHMENT_BYTES = 100L * 1024L * 1024L
+        private const val MAX_TOTAL_ATTACHMENT_BYTES = 512L * 1024L * 1024L
     }
 
     private val db = NoteDatabase.get(context)
@@ -67,7 +70,7 @@ class BackupManager(private val context: Context) {
         } ?: throw BackupException("محل ذخیره پشتیبان قابل دسترسی نیست.")
     }
 
-    suspend fun importFrom(uri: Uri) {
+    suspend fun inspect(uri: Uri): BackupInfo {\n        val manifestText = readZipText(uri, MANIFEST, 1024 * 1024)\n        val manifest = parseManifest(manifestText)\n        validateManifest(manifest)\n        return BackupInfo(\n            createdAt = manifest.createdAt,\n            schemaVersion = manifest.schemaVersion,\n            notesCount = manifest.notesCount,\n            blocksCount = manifest.blocksCount,\n            financeCount = manifest.financeCount,\n            attachmentsCount = manifest.attachmentsCount\n        )\n    }\n\n    suspend fun importFrom(uri: Uri) {
         val tempRoot = File(context.cacheDir, "backup-import-" + System.currentTimeMillis())
         val extracted = File(tempRoot, "files")
         tempRoot.mkdirs()
@@ -109,7 +112,7 @@ class BackupManager(private val context: Context) {
                 }
             } ?: throw BackupException("فایل پشتیبان قابل خواندن نیست.")
 
-            val manifest = parseManifest(requireText(manifestText, MANIFEST))
+            val manifest = parseManifest(requireText(manifestText, MANIFEST))\n            validateManifest(manifest)
             val notes = parseNotes(requireText(notesText, NOTES))
             val blocks = parseBlocks(requireText(blocksText, BLOCKS))
             val finance = parseFinance(requireText(financeText, FINANCE))
@@ -118,7 +121,7 @@ class BackupManager(private val context: Context) {
             validate(manifest, notes, blocks, finance, attachmentRecords, extracted)
 
             val attachmentsDir = File(context.filesDir, "attachments").apply { mkdirs() }
-            val copiedFiles = mutableListOf<File>()
+            val copiedFiles = mutableListOf<File>()\n            var copiedBytes = 0L
             val restoredAttachments = attachmentRecords.map { record ->
                 val source = File(extracted, record.id.toString() + ".bin")
                 val target = File(
@@ -301,7 +304,7 @@ class BackupManager(private val context: Context) {
         )
     }
 
-    private fun parseNotes(text: String): List<NoteEntity> = JSONArray(text).let { array ->
+    private fun validateManifest(manifest: Manifest) {\n        if (manifest.formatVersion != FORMAT_VERSION) throw BackupException("نسخه پشتیبان پشتیبانی نمی‌شود.")\n        if (manifest.schemaVersion !in 6..SCHEMA_VERSION) throw BackupException("نسخه ساختار داده این پشتیبان با این نسخه ای‌نوت سازگار نیست.")\n        if (manifest.createdAt <= 0L) throw BackupException("زمان ایجاد پشتیبان معتبر نیست.")\n        if (manifest.notesCount < 0 || manifest.blocksCount < 0 || manifest.financeCount < 0 || manifest.attachmentsCount < 0) {\n            throw BackupException("اطلاعات آماری پشتیبان معتبر نیست.")\n        }\n    }\n\n    private suspend fun readZipText(uri: Uri, targetName: String, maxBytes: Int): String {\n        context.contentResolver.openInputStream(uri)?.use { input ->\n            ZipInputStream(BufferedInputStream(input)).use { zip ->\n                var entry = zip.nextEntry\n                while (entry != null) {\n                    if (!entry.isDirectory && entry.name == targetName) return zip.readUtf8Limited(maxBytes)\n                    zip.closeEntry()\n                    entry = zip.nextEntry\n                }\n            }\n        } ?: throw BackupException("فایل پشتیبان قابل خواندن نیست.")\n        throw BackupException("بخش «" + targetName + "» در پشتیبان وجود ندارد.")\n    }\n\n    private fun parseNotes(text: String): List<NoteEntity> = JSONArray(text).let { array ->
         (0 until array.length()).map { i ->
             array.getJSONObject(i).let {
                 NoteEntity(
