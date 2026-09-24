@@ -124,7 +124,7 @@ class BackupManager(private val context: Context) {
                 val target = File(
                     attachmentsDir,
                     "restored_" + System.currentTimeMillis() + "_" +
-                        record.id + "_" + safeFileName(record.fileName)
+                        record.id + "_" + safeFileName(record.entity.fileName)
                 )
                 source.copyTo(target, overwrite = false)
                 copiedFiles += target
@@ -315,7 +315,7 @@ class BackupManager(private val context: Context) {
 
     private fun parseBlocks(text: String): List<NoteBlockEntity> = JSONArray(text).let { array ->
         (0 until array.length()).map { i ->
-            JSONObject(array.getString(i)).let {
+            array.getJSONObject(i).let {
                 NoteBlockEntity(
                     it.getLong("id"),
                     it.getLong("noteId"),
@@ -335,7 +335,7 @@ class BackupManager(private val context: Context) {
 
     private fun parseFinance(text: String): List<FinanceTransactionEntity> = JSONArray(text).let { array ->
         (0 until array.length()).map { i ->
-            JSONObject(array.getString(i)).let {
+            array.getJSONObject(i).let {
                 FinanceTransactionEntity(
                     it.getLong("id"),
                     it.getString("title"),
@@ -352,7 +352,7 @@ class BackupManager(private val context: Context) {
 
     private fun parseAttachments(text: String): List<AttachmentRecord> = JSONArray(text).let { array ->
         (0 until array.length()).map { i ->
-            JSONObject(array.getString(i)).let {
+            array.getJSONObject(i).let {
                 AttachmentRecord(
                     it.getLong("id"),
                     AttachmentEntity(

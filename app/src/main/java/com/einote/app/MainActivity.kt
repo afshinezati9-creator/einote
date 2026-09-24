@@ -1,15 +1,13 @@
 package com.einote.app
 
 import android.Manifest
-import android.app.TimePickerDialog
-import android.app.Activity
 import android.media.MediaPlayer
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.BackHandler
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -29,6 +27,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.fragment.app.FragmentActivity
 import androidx.core.content.ContextCompat
 import com.einote.app.security.SecurityManager
 import com.einote.app.ui.SecurityViewModel
@@ -52,7 +51,7 @@ import java.io.File
 import kotlinx.coroutines.delay
 import java.util.Calendar
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent { EiNoteApp() }
@@ -119,7 +118,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
                 viewModel = securityViewModel,
                 onUnlocked = { locked = false },
                 onBiometric = {
-                    val activity = context as? Activity
+                    val activity = context as? FragmentActivity
                     if (activity != null) showBiometric(activity) { locked = false }
                 }
             )
@@ -151,7 +150,7 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     }
 }
 
-private fun showBiometric(activity: Activity, onSuccess: () -> Unit) {
+private fun showBiometric(activity: FragmentActivity, onSuccess: () -> Unit) {
     val manager = BiometricManager.from(activity)
     val authenticators = androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG or
         androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
@@ -579,7 +578,8 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
 
             Button(
                 onClick = {
-                    val date = PersianFormat.currentJalali().joinToString("-")
+                    val current = PersianFormat.currentJalali()
+                    val date = "${current.first}-${current.second}-${current.third}"
                     exportLauncher.launch("eiNote-backup-" + date + ".einote")
                 },
                 enabled = !busy,
@@ -640,7 +640,7 @@ private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
 @Composable
 private fun NoteCard(note:NoteEntity,onOpen:()->Unit,onPin:()->Unit,onArchive:()->Unit,onTagClick:(String)->Unit){
     var menu by remember{mutableStateOf(false)}
-    Card(Modifier.fillMaxWidth(),shape=RoundedCornerShape(18.dp),onClick=onOpen){
+    Card(onClick=onOpen, modifier=Modifier.fillMaxWidth(), shape=RoundedCornerShape(18.dp)){
         Column(Modifier.padding(16.dp)){
             Row(Modifier.fillMaxWidth()){
                 Text(note.title.ifBlank{"یادداشت بدون عنوان"},Modifier.weight(1f),style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
@@ -823,7 +823,7 @@ private fun NoteEditor(
                 Row(Modifier.fillMaxWidth()) {
                     TextButton(onClick = { viewModel.addTextBlock(noteId) }) { Text("+ متن") }
                     TextButton(onClick = { viewModel.addChecklistBlock(noteId) }) { Text("+ چک‌لیست") }
-                    TextButton(onClick = { photoPicker.launch(ActivityResultContracts.PickVisualMedia.ImageOnly) }) {
+                    TextButton(onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
                         Icon(Icons.Default.Photo, null)
                         Spacer(Modifier.width(4.dp))
                         Text("عکس")
@@ -1054,6 +1054,7 @@ private fun BlockEditor(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FinanceScreen(viewModel: FinanceViewModel, onBack: () -> Unit) {
     val transactions by viewModel.transactions.collectAsState(initial = emptyList())
