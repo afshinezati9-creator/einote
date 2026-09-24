@@ -30,6 +30,7 @@ import com.einote.app.data.NoteEntity
 import com.einote.app.ui.NoteViewModel
 import com.einote.app.ui.FinanceViewModel
 import com.einote.app.ui.AttachmentViewModel
+import com.einote.app.ui.BackupViewModel
 import com.einote.app.data.FinanceTransactionEntity
 import com.einote.app.util.PersianFormat
 import coil.compose.AsyncImage
@@ -49,6 +50,8 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
     var editingId by remember { mutableStateOf<Long?>(null) }
     var plannerOpen by remember { mutableStateOf(false) }
     var financeOpen by remember { mutableStateOf(false) }
+    var backupOpen by remember { mutableStateOf(false) }
+    val backupViewModel: BackupViewModel = viewModel()
     val financeViewModel: FinanceViewModel = viewModel()
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
@@ -66,12 +69,14 @@ fun EiNoteApp(viewModel: NoteViewModel = viewModel()) {
             )
             plannerOpen -> PlannerScreen(viewModel, onBack = { plannerOpen = false })
             financeOpen -> FinanceScreen(financeViewModel, onBack = { financeOpen = false })
+            backupOpen -> BackupScreen(backupViewModel, onBack = { backupOpen = false })
             else -> HomeScreen(
                 viewModel = viewModel,
                 onCreate = { viewModel.createNote { editingId = it } },
                 onOpen = { editingId = it },
                 onPlanner = { plannerOpen = true },
-                onFinance = { financeOpen = true }
+                onFinance = { financeOpen = true },
+                onBackup = { backupOpen = true }
             )
         }
     }
@@ -84,7 +89,8 @@ private fun HomeScreen(
     onCreate: () -> Unit,
     onOpen: (Long) -> Unit,
     onPlanner: () -> Unit,
-    onFinance: () -> Unit
+    onFinance: () -> Unit,
+    onBackup: () -> Unit
 ) {
     val notes by viewModel.notes.collectAsState(initial = emptyList())
     val query by viewModel.searchQuery.collectAsState()
@@ -115,6 +121,7 @@ private fun HomeScreen(
                     actions = {
                         IconButton(onClick = onPlanner) { Icon(Icons.Default.CalendarMonth, "برنامه") }
                         IconButton(onClick = onFinance) { Icon(Icons.Default.AccountBalanceWallet, "مالی") }
+                        IconButton(onClick = onBackup) { Icon(Icons.Default.SettingsBackupRestore, "پشتیبان") }
                         IconButton(onClick = { searchOpen = true }) { Icon(Icons.Default.Search, "جستجو") }
                     }
                 )
@@ -147,6 +154,109 @@ private fun HomeScreen(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BackupScreen(viewModel: BackupViewModel, onBack: () -> Unit) {
+    val busy by viewModel.busy.collectAsState()
+    val message by viewModel.message.collectAsState()
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        uri?.let { viewModel.export(it) }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        uri?.let { viewModel.import(it) }
+    }
+    var confirmRestore by remember { mutableStateOf(false) }
+
+    BackHandler { if (!busy) onBack() }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("پشتیبان و بازیابی") },
+                navigationIcon = {
+                    IconButton(onClick = onBack, enabled = !busy) {
+                        Icon(Icons.Default.ArrowBack, "بازگشت")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("پشتیبان کامل دفتر", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("یادداشت‌ها، چک‌لیست‌ها، برنامه‌ریزی، یادآوری‌ها، دخل‌وخرج و همه عکس‌ها، فایل‌ها و صداها در یک فایل آفلاین ذخیره می‌شوند.")
+                    Text("فرمت پشتیبان نسخه‌دار است و قبل از بازیابی، ساختار و ارتباط داده‌ها بررسی می‌شود.")
+                }
+            }
+
+            Button(
+                onClick = {
+                    val date = PersianFormat.currentJalali().joinToString("-")
+                    exportLauncher.launch("eiNote-backup-" + date + ".einote")
+                },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Backup, null)
+                Spacer(Modifier.width(8.dp))
+                Text("ساخت پشتیبان")
+            }
+
+            OutlinedButton(
+                onClick = { confirmRestore = true },
+                enabled = !busy,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Restore, null)
+                Spacer(Modifier.width(8.dp))
+                Text("بازیابی پشتیبان")
+            }
+
+            if (busy) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("در حال انجام عملیات…")
+            }
+
+            message?.let {
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                    Text(it, Modifier.padding(14.dp))
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+            Text(
+                "نکته: بازیابی، دفتر فعلی را با نسخه داخل پشتیبان جایگزین می‌کند. اگر فایل خراب یا ناسازگار باشد، بازیابی متوقف می‌شود.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }
+
+    if (confirmRestore) {
+        AlertDialog(
+            onDismissRequest = { if (!busy) confirmRestore = false },
+            title = { Text("بازیابی پشتیبان؟") },
+            text = { Text("اطلاعات فعلی این دفتر با اطلاعات موجود در پشتیبان جایگزین می‌شود. قبل از ادامه مطمئن شو که پشتیبان درست را انتخاب می‌کنی.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRestore = false
+                    importLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/*"))
+                }) { Text("ادامه") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRestore = false }) { Text("انصراف") }
+            }
+        )
     }
 }
 
