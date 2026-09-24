@@ -55,7 +55,7 @@ class NoteDatabaseMigrationTest {
         )
         database.insert(
             "note_blocks",
-            SupportSQLiteDatabase.CONFLICT_NONE,
+            SQLiteDatabase.CONFLICT_NONE,
             android.content.ContentValues().apply {
                 put("id", 11L)
                 put("noteId", 7L)
