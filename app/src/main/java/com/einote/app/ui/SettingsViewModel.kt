@@ -34,6 +34,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _compactBlocks = MutableStateFlow(settings.compactBlocks())
     val compactBlocks: StateFlow<Boolean> = _compactBlocks.asStateFlow()
 
+    private val _editorMode = MutableStateFlow(settings.editorMode())
+    val editorMode: StateFlow<String> = _editorMode.asStateFlow()
+
     fun setThemeMode(v: String) {
         settings.setThemeMode(v)
         _themeMode.value = settings.themeMode()
@@ -47,4 +50,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setShowArchived(v: Boolean) { settings.setShowArchived(v); _showArchived.value = v }
     fun setNotifications(v: Boolean) { settings.setNotificationsEnabled(v); _notifications.value = v }
     fun setCompactBlocks(v: Boolean) { settings.setCompactBlocks(v); _compactBlocks.value = v }
+    fun setEditorMode(v: String) {
+        settings.setEditorMode(v)
+        _editorMode.value = settings.editorMode()
+    }
 }
