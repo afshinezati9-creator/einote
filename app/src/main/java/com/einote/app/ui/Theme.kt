@@ -1,33 +1,42 @@
 package com.einote.app.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.sp
 
 private fun accentColor(name: String): Color = when (name) {
     "purple" -> Color(0xFF7C4DFF)
     "green" -> Color(0xFF2E7D32)
     "orange" -> Color(0xFFEF6C00)
+    "pink" -> Color(0xFFC2185B)
     else -> Color(0xFF1565C0)
 }
 
 @Composable
 fun EiNoteTheme(
-    darkTheme: Boolean,
+    themeMode: String,
     accent: String,
     textScale: Float,
     content: @Composable () -> Unit
 ) {
+    val systemDark = isSystemInDarkTheme()
+    val darkTheme = when (themeMode) {
+        "dark" -> true
+        "system" -> systemDark
+        else -> false
+    }
+
     val primary = accentColor(accent)
     val colors = if (darkTheme) {
         darkColorScheme(primary = primary, secondary = primary, tertiary = primary)
     } else {
         lightColorScheme(primary = primary, secondary = primary, tertiary = primary)
     }
+
     val base = Typography()
     val s = textScale.coerceIn(0.9f, 1.2f)
     val typography = base.copy(
@@ -47,5 +56,6 @@ fun EiNoteTheme(
         labelMedium = base.labelMedium.copy(fontSize = base.labelMedium.fontSize * s),
         labelSmall = base.labelSmall.copy(fontSize = base.labelSmall.fontSize * s)
     )
+
     MaterialTheme(colorScheme = colors, typography = typography, content = content)
 }
