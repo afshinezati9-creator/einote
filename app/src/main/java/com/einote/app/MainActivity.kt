@@ -828,6 +828,7 @@ private fun NoteEditor(
     val isRecording by attachmentViewModel.isRecording.collectAsState()
     val recordingElapsedMs by attachmentViewModel.recordingElapsedMs.collectAsState()
     var showRecordingPanel by remember { mutableStateOf(false) }
+    var recordingPaused by remember { mutableStateOf(false) }
 
     val screenWidth = LocalConfiguration.current.screenWidthDp
     val isPhone = screenWidth < 600
@@ -927,13 +928,25 @@ private fun NoteEditor(
             if (showRecordingPanel || isRecording) {
                 InlineRecordingPanel(
                     isRecording = isRecording,
+                    isPaused = recordingPaused,
                     elapsedMs = recordingElapsedMs,
                     onStart = {
-                        if (!isRecording) audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        if (!isRecording) {
+                            recordingPaused = false
+                            audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
                     },
-                    onPause = { /* MediaRecorder pause/resume is added in the next recording refinement. */ },
+                    onPause = {
+                        recordingPaused = !recordingPaused
+                        if (recordingPaused) {
+                            attachmentViewModel.pauseVoiceRecording()
+                        } else {
+                            attachmentViewModel.resumeVoiceRecording()
+                        }
+                    },
                     onStop = {
                         attachmentViewModel.stopVoiceRecording()
+                        recordingPaused = false
                         showRecordingPanel = false
                     },
                     onDismiss = {
@@ -1069,6 +1082,7 @@ private fun NoteEditor(
 @Composable
 private fun InlineRecordingPanel(
     isRecording: Boolean,
+    isPaused: Boolean,
     elapsedMs: Long,
     onStart: () -> Unit,
     onPause: () -> Unit,
@@ -1095,14 +1109,14 @@ private fun InlineRecordingPanel(
                     .size(12.dp)
                     .clip(androidx.compose.foundation.shape.CircleShape)
                     .background(
-                        if (isRecording) MaterialTheme.colorScheme.error
+                        if (isRecording && !isPaused) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.outline
                     )
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (isRecording) "در حال ضبط صدا" else "آماده ضبط صدا",
+                    if (isRecording && !isPaused) "در حال ضبط صدا" else if (isPaused) "ضبط متوقف شده — آماده ادامه" else "آماده ضبط صدا",
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
@@ -1117,7 +1131,7 @@ private fun InlineRecordingPanel(
                 }
             } else {
                 IconButton(onClick = onPause) {
-                    Icon(Icons.Default.Pause, "مکث")
+                    Icon(if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause, if (isPaused) "ادامه ضبط" else "مکث")
                 }
                 IconButton(onClick = onStop) {
                     Icon(Icons.Default.StopCircle, "توقف و ذخیره")
