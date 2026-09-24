@@ -89,7 +89,7 @@ class BackupManager(private val context: Context) {
                             BLOCKS -> blocksText = zip.readUtf8Limited(32 * 1024 * 1024)
                             FINANCE -> financeText = zip.readUtf8Limited(16 * 1024 * 1024)
                             ATTACHMENTS -> attachmentsText = zip.readUtf8Limited(32 * 1024 * 1024)
-                            else -> if (entry.name.matches(Regex("""files/[0-9]+\\.bin"""))) {
+                            else -> if (entry.name.matches(Regex("""files/[0-9]+\.bin"""))) {
                                 val fileName = entry.name.removePrefix(FILES_DIR)
                                 val target = File(extracted, fileName)
                                 target.outputStream().use { out -> zip.copyTo(out) }
@@ -272,7 +272,7 @@ class BackupManager(private val context: Context) {
 
     private fun parseNotes(text: String): List<NoteEntity> = JSONArray(text).let { array ->
         (0 until array.length()).map { i ->
-            JSONObject(array.getString(i)).let {
+            array.getJSONObject(i).let {
                 NoteEntity(
                     it.getLong("id"),
                     it.getString("title"),
