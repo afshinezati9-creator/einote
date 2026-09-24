@@ -26,7 +26,7 @@ import java.util.zip.ZipOutputStream
 class BackupManager(private val context: Context) {
     companion object {
         const val FORMAT_VERSION = 1
-        private const val SCHEMA_VERSION = 7
+        private const val SCHEMA_VERSION = 8
         private const val MANIFEST = "manifest.json"
         private const val NOTES = "data/notes.json"
         private const val BLOCKS = "data/blocks.json"
@@ -258,6 +258,7 @@ class BackupManager(private val context: Context) {
                 .put("completedAt", it.completedAt ?: JSONObject.NULL)
                 .put("textColor", it.textColor)
                 .put("textSizeSp", it.textSizeSp)
+                .put("alignment", it.alignment)
                 .put("createdAt", it.createdAt)
                 .put("updatedAt", it.updatedAt))
         }
@@ -334,6 +335,7 @@ class BackupManager(private val context: Context) {
                     it.optNullableLong("completedAt"),
                     it.optLong("textColor", 0L),
                     it.optDouble("textSizeSp", 17.0).toFloat(),
+                    it.optString("alignment", "auto"),
                     it.getLong("createdAt"),
                     it.getLong("updatedAt")
                 )
