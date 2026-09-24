@@ -25,6 +25,7 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
     private var recorder: MediaRecorder? = null
     private var recordingNoteId: Long? = null
     private var recordingFile: File? = null
+    private var recordingInsertPosition: Int? = null
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
@@ -45,14 +46,14 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         copyIntoAppStorage(noteId, name, mime, uri, null)
     }
 
-    fun addImageFromUri(noteId: Long, uri: Uri) = viewModelScope.launch {
+    fun addImageFromUri(noteId: Long, uri: Uri, position: Int? = null) = viewModelScope.launch {
         val resolver = app.contentResolver
         val mime = resolver.getType(uri) ?: "image/*"
         val name = queryDisplayName(uri) ?: "عکس-${System.currentTimeMillis()}.jpg"
-        copyIntoAppStorage(noteId, name, mime, uri, BlockType.IMAGE)
+        copyIntoAppStorage(noteId, name, mime, uri, BlockType.IMAGE, position)
     }
 
-    fun startVoiceRecording(noteId: Long): Boolean {
+    fun startVoiceRecording(noteId: Long, insertPosition: Int? = null): Boolean {
         if (_isRecording.value) return false
         val dir = File(app.filesDir, "attachments").apply { mkdirs() }
         val file = File(dir, "voice_${System.currentTimeMillis()}.m4a")
@@ -70,6 +71,7 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                 recorder = it
                 recordingNoteId = noteId
                 recordingFile = file
+                recordingInsertPosition = insertPosition
                 _isRecording.value = true
                 _recordingStartedAt.value = System.currentTimeMillis()
                 _recordingElapsedMs.value = 0L
@@ -98,9 +100,11 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         val activeRecorder = recorder ?: return
         val file = recordingFile
         val noteId = recordingNoteId
+        val insertPosition = recordingInsertPosition
         recorder = null
         recordingFile = null
         recordingNoteId = null
+        recordingInsertPosition = null
         _isRecording.value = false
         recordingTicker?.cancel()
         recordingTicker = null
@@ -125,7 +129,7 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                                 noteId = noteId,
                                 type = BlockType.AUDIO.name,
                                 content = attachmentId.toString(),
-                                position = blockDao.nextPosition(noteId)
+                                position = insertPosition ?: blockDao.nextPosition(noteId)
                             )
                         )
                     }
@@ -162,7 +166,8 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
         name: String,
         mime: String,
         uri: Uri,
-        createBlock: BlockType?
+        createBlock: BlockType?,
+        position: Int? = null
     ) {
         val safeName = name.replace(Regex("""[\/:*?"<>|]"""), "_")
         val dir = File(app.filesDir, "attachments").apply { mkdirs() }
@@ -182,12 +187,14 @@ class AttachmentViewModel(application: Application) : AndroidViewModel(applicati
                 )
             )
             if (createBlock != null) {
+                val targetPosition = position ?: blockDao.nextPosition(noteId)
+                blockDao.shiftPositions(noteId, targetPosition, System.currentTimeMillis())
                 blockDao.insert(
                     NoteBlockEntity(
                         noteId = noteId,
                         type = createBlock.name,
                         content = attachmentId.toString(),
-                        position = blockDao.nextPosition(noteId)
+                        position = targetPosition
                     )
                 )
             }
